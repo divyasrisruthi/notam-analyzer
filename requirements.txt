@@ -1,6 +1,6 @@
-flask==3.1.0
+flask==3.0.0
 flask-cors==5.0.0
-scipy==1.14.1
-numpy==2.2.1
+numpy==1.23.5
+scipy==1.10.1
 gunicorn==23.0.0
 python-dotenv==1.0.1

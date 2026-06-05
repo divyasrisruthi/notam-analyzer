@@ -129,16 +129,23 @@ def load_waypoints(csv_path: str) -> int:
 
     # ---------- FORMAT 1 ----------
     if is_your_format:
-        for row in rows[1:]:
+        bad_samples = []
+
+        for row_num, row in enumerate(rows[1:], start=2):
             try:
                 if len(row) < 4:
                     skipped += 1
                     continue
 
-                airway_id = row[0].strip().upper()
-                wpt_name = row[1].strip().upper()
-                fir_code = row[2].strip().upper()
-                coord_raw = row[3].strip().upper().replace(" ", "")
+                airway_id = str(row[0]).strip().upper()
+                wpt_name  = str(row[1]).strip().upper()
+                fir_code  = str(row[2]).strip().upper()
+
+                # More defensive cleanup for coord field
+                coord_raw = str(row[3]).strip().upper()
+                coord_raw = coord_raw.replace("\u00A0", "")
+                coord_raw = coord_raw.replace(" ", "")
+                coord_raw = coord_raw.strip(" '\"`.;:")
 
                 # skip separators / junk
                 if not wpt_name or not coord_raw:
@@ -152,6 +159,13 @@ def load_waypoints(csv_path: str) -> int:
                 parsed = _parse_coord_str(coord_raw)
                 if parsed is None:
                     skipped += 1
+                    if len(bad_samples) < 5:
+                        bad_samples.append({
+                            "row": row_num,
+                            "name": wpt_name,
+                            "coord_raw": coord_raw,
+                            "full_row": row[:4]
+                        })
                     continue
 
                 lat, lon = parsed
@@ -169,9 +183,16 @@ def load_waypoints(csv_path: str) -> int:
 
             except Exception:
                 skipped += 1
+                if len(bad_samples) < 5:
+                    bad_samples.append({
+                        "row": row_num,
+                        "full_row": row[:4]
+                    })
                 continue
 
         log.info("Skipped %d bad rows", skipped)
+        if bad_samples:
+            log.warning("Sample bad CSV rows: %s", bad_samples)
 
     # ---------- FORMAT 2 ----------
     else:
@@ -251,16 +272,6 @@ def load_waypoints(csv_path: str) -> int:
 
     return len(names)
 
-# ── Waypoint bootstrap (must run for both local Flask and Gunicorn) ──────────
-DEFAULT_WAYPOINT_PATH = Path(__file__).resolve().parent.parent / "data" / "wavepoints.csv"
-DATA_PATH = os.environ.get("WAYPOINT_CSV", str(DEFAULT_WAYPOINT_PATH))
-
-log.info("Waypoint CSV path: %s", DATA_PATH)
-log.info("Waypoint CSV exists: %s", Path(DATA_PATH).exists())
-
-count = load_waypoints(DATA_PATH)
-if count == 0:
-    log.warning("Waypoint dataset could not be loaded. App is starting in degraded mode.")
 
 # ── Coordinate parsers ────────────────────────────────────────────────────────
 def _parse_coord_str(s: str) -> tuple[float, float] | None:
@@ -307,6 +318,18 @@ def _parse_coord_str(s: str) -> tuple[float, float] | None:
 def parse_coord(coord_str: str) -> dict | None:
     result = _parse_coord_str(coord_str)
     return {"lat": result[0], "lon": result[1]} if result else None
+
+
+# ── Waypoint bootstrap (must run for both local Flask and Gunicorn) ──────────
+DEFAULT_WAYPOINT_PATH = Path(__file__).resolve().parent.parent / "data" / "wavepoints.csv"
+DATA_PATH = os.environ.get("WAYPOINT_CSV", str(DEFAULT_WAYPOINT_PATH))
+
+log.info("Waypoint CSV path: %s", DATA_PATH)
+log.info("Waypoint CSV exists: %s", Path(DATA_PATH).exists())
+
+count = load_waypoints(DATA_PATH)
+if count == 0:
+    log.warning("Waypoint dataset could not be loaded. App is starting in degraded mode.")
 
 
 # ── Geo math ──────────────────────────────────────────────────────────────────

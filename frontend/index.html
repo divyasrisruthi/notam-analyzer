@@ -1,0 +1,601 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<meta http-equiv="X-UA-Compatible" content="IE=edge"/>
+<meta name="robots" content="noindex,nofollow"/>
+<title>NOTAM Waypoint Analyzer</title>
+<link rel="stylesheet" href="leaflet.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --navy:#07111f;--navy2:#0d1e33;--navy3:#132844;
+  --border:rgba(255,255,255,.08);
+  --teal:#00d4aa;--teal2:#00b890;--red:#e24b4a;--amber:#f5a623;--magenta:#e040fb;
+  --text:#e0f0ff;--muted:#5a8aaa;
+  --mono:'JetBrains Mono',monospace;--sans:'DM Sans',sans-serif;
+}
+body{font-family:var(--sans);background:var(--navy);color:var(--text);height:100vh;overflow:hidden;display:flex;flex-direction:column}
+.topbar{background:var(--navy2);border-bottom:1px solid var(--border);padding:0 20px;height:48px;display:flex;align-items:center;gap:14px;flex-shrink:0;z-index:100}
+.tb-dot{width:8px;height:8px;border-radius:50%;background:var(--teal);box-shadow:0 0 6px var(--teal)}
+.tb-title{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--teal);letter-spacing:.08em}
+.tb-divider{width:1px;height:20px;background:var(--border)}
+.tb-sub{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.tb-status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted)}
+.tb-status-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);transition:all .3s}
+.tb-status-dot.ok{background:var(--teal);box-shadow:0 0 4px var(--teal)}
+.tb-status-dot.busy{background:var(--amber);animation:pulse 1s infinite}
+.tb-status-dot.err{background:var(--red)}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.wpt-count{font-family:var(--mono);font-size:10px;color:var(--muted);background:var(--navy3);border:1px solid var(--border);border-radius:4px;padding:2px 8px}
+.layout{display:grid;grid-template-columns:340px 1fr;flex:1;overflow:hidden}
+.panel{background:var(--navy2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.p-section{padding:14px 16px;border-bottom:1px solid var(--border)}
+.p-label{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
+textarea{width:100%;height:160px;background:var(--navy3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:11px;color:var(--text);resize:none;line-height:1.7;transition:border-color .2s;outline:none}
+textarea:focus{border-color:var(--teal)}
+textarea::placeholder{color:var(--muted);opacity:.7}
+.btn-row{display:flex;gap:8px;margin-top:10px}
+.btn{flex:1;padding:9px 12px;border-radius:7px;font-size:12px;font-weight:600;font-family:var(--sans);cursor:pointer;transition:all .15s;border:none;letter-spacing:.02em}
+.btn-primary{background:var(--teal);color:var(--navy)}
+.btn-primary:hover{background:var(--teal2);transform:translateY(-1px)}
+.btn-primary:disabled{background:#1a3a30;color:#2a5a48;cursor:not-allowed;transform:none}
+.btn-ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
+.btn-ghost:hover{border-color:var(--teal);color:var(--teal)}
+.notam-meta{display:block;}
+.meta-chip{background:var(--navy3);border:1px solid var(--border);border-radius:6px;padding:6px 10px}
+.meta-chip-label{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:2px}
+.meta-chip-val{font-family:var(--mono);font-size:12px;color:var(--teal);font-weight:600}
+.seg-scroll{flex:1;overflow-y:auto;padding:10px}
+.seg-scroll::-webkit-scrollbar{width:4px}
+.seg-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.seg-card{background:var(--navy3);border:1px solid var(--border);border-radius:8px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:all .18s}
+.seg-card:hover{border-color:rgba(0,212,170,.4)}
+.seg-card.active{border-color:var(--teal);background:rgba(0,212,170,.07)}
+.seg-route{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--teal);margin-bottom:5px}
+.seg-path{font-size:13px;font-weight:500;color:var(--text);display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.seg-arrow{color:var(--muted);font-size:11px}
+.seg-wpt{padding:2px 7px;border-radius:4px;font-family:var(--mono);font-size:12px;font-weight:600}
+.seg-wpt.named{background:rgba(0,212,170,.15);color:var(--teal);border:1px solid rgba(0,212,170,.3)}
+.seg-wpt.resolved{background:rgba(224,64,251,.15);color:var(--magenta);border:1px solid rgba(224,64,251,.3)}
+.seg-wpt.distdir{background:rgba(245,166,35,.15);color:var(--amber);border:1px solid rgba(245,166,35,.3)}
+.seg-badge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--red);background:rgba(226,75,74,.12);border-radius:4px;padding:2px 7px;margin-top:6px}
+.seg-dist{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px}
+.empty{padding:30px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.8}
+.empty-icon{font-size:28px;margin-bottom:10px;opacity:.4}
+.spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(226,75,74,.15);border:1px solid var(--red);border-radius:8px;padding:10px 18px;font-size:13px;color:var(--red);z-index:9999;font-family:var(--mono);display:none;max-width:480px;text-align:center}
+.toast.show{display:block}
+.map-wrap{position:relative;overflow:hidden}
+#map{width:100%;height:100%}
+.leaflet-container{background:#d4e0f0}
+.leaflet-control-zoom a{background:#fff!important;color:#1a3a5c!important;border-color:#aac!important;font-weight:700}
+.legend{position:absolute;bottom:16px;right:16px;z-index:1000;background:rgba(255,255,255,.95);backdrop-filter:blur(4px);border:1px solid #ccc;border-radius:6px;padding:10px 14px;font-family:var(--mono);font-size:11px;color:#1a3a5c;pointer-events:none;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.leg-item{display:flex;align-items:center;gap:8px;margin-bottom:5px}
+.leg-item:last-child{margin-bottom:0}
+.leg-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0;border:1.5px solid rgba(0,0,0,.2)}
+.leg-line{width:22px;height:3px;border-radius:2px;flex-shrink:0}
+.lf-popup{font-family:var(--mono);font-size:12px;background:#fff;border:1px solid #1a5c9a;border-radius:6px;padding:4px 0;color:#1a3a5c;min-width:160px;box-shadow:0 2px 8px rgba(0,0,0,.15)}
+.lf-popup-title{font-weight:700;color:#1a5c9a;padding:6px 12px 4px;border-bottom:1px solid #eee}
+.lf-popup-row{display:flex;justify-content:space-between;gap:12px;padding:4px 12px;font-size:11px}
+.lf-popup-row span:last-child{color:#666}
+.leaflet-popup-content-wrapper{background:transparent;border:none;box-shadow:none;padding:0}
+.leaflet-popup-tip{background:#1a5c9a}
+.leaflet-popup-content{margin:0}
+.btmbar{background:var(--navy2);border-top:1px solid var(--border);height:32px;display:flex;align-items:center;gap:10px;padding:0 16px;flex-shrink:0;z-index:100}
+.btm-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);transition:all .3s}
+.btm-dot.ok{background:var(--teal);box-shadow:0 0 4px var(--teal)}
+.btm-dot.busy{background:var(--amber);animation:pulse 1s infinite}
+#btm-text{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.btm-right{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+
+<header class="topbar">
+  <div class="tb-dot"></div>
+  <div class="tb-title">NOTAM WAYPOINT ANALYZER</div>
+  <div class="tb-divider"></div>
+  <div class="tb-sub">ATS Route Closure Tool</div>
+  <div class="tb-right">
+    <div class="tb-status">
+      <div class="tb-status-dot" id="api-dot"></div>
+      <span id="api-label">checking...</span>
+    </div>
+    <div class="wpt-count" id="wpt-count">— wpts</div>
+  </div>
+</header>
+
+
+<main class="layout">
+  <aside class="panel">
+    <div class="p-section">
+      <div class="p-label">NOTAM Input</div>
+      <textarea id="notam-input" spellcheck="false" autocomplete="off"
+        placeholder="Paste NOTAM text here...&#10;&#10;Supports:&#10;W195 : ALGOT - N401609E1024104&#10;W195:N382553E1031424-MORIT&#10;SEGMENT N350737E1000535 - OMBON OF ATS RTE Y1&#10;G470 : BIKNO - 140KM WEST OF BIKNO&#10;W112 : 60NM WEST OF HOTAN VOR'HTN' - ADMUX"></textarea>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="btn-analyze" onclick="analyzeNotam()">Analyze</button>
+        <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
+      </div>
+    </div>
+
+
+    <div class="p-section" id="meta-section" style="display:none">
+      <div class="p-label">NOTAM Details</div>
+      <div class="notam-meta">
+        <div class="meta-chip"><div class="meta-chip-label">NOTAM ID</div><div class="meta-chip-val" id="meta-id">—</div></div>
+      </div>
+    </div>
+
+
+    <div class="p-section" style="border-bottom:none;padding-bottom:6px">
+      <div class="p-label">Affected Segments <span id="seg-count" style="color:var(--teal)"></span></div>
+    </div>
+    <div class="seg-scroll" id="seg-list">
+      <div class="empty"><div class="empty-icon">✈</div>Paste a NOTAM and click Analyze.</div>
+    </div>
+  </aside>
+
+
+  <section class="map-wrap">
+    <div id="map"></div>
+    <div class="legend">
+      <div class="leg-item"><div class="leg-dot" style="background:#1a7a4a"></div> Named waypoint</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#e040fb"></div> Resolved coord</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#f5a623"></div> Resolved dist/dir</div>
+      <div class="leg-item"><div class="leg-dot" style="background:#00d4aa"></div> Original coord/calc point</div>
+      <div class="leg-item"><div class="leg-line" style="background:#3060d0"></div> Airway (background)</div>
+      <div class="leg-item"><div class="leg-line" style="background:#e040fb"></div> Closed segment</div>
+    </div>
+  </section>
+</main>
+
+
+<footer class="btmbar">
+  <div class="btm-dot" id="btm-dot"></div>
+  <span id="btm-text">Ready</span>
+  <div class="btm-right">NOTAM Analyzer v1.1 · Internal Use Only</div>
+</footer>
+<div class="toast" id="toast"></div>
+
+
+<script src="leaflet.js"></script>
+<script>
+'use strict';
+/* global L */
+
+
+let map, markers=[], polylines=[], currentSegments=[], allWaypointMeta=[];
+
+
+// ── Map init ──────────────────────────────────────────────────────────────────
+function initMap() {
+  map = L.map('map', {zoomControl:true}).setView([38, 104], 5);
+  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+    attribution: '© OSM © CARTO', subdomains: 'abcd', maxZoom: 18
+  }).addTo(map);
+}
+
+
+// ── Status ────────────────────────────────────────────────────────────────────
+function setStatus(msg, state='idle') {
+  document.getElementById('btm-text').textContent = msg;
+  document.getElementById('btm-dot').className = 'btm-dot'+(state==='ok'?' ok':state==='busy'?' busy':'');
+}
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 5000);
+}
+
+
+// ── Health check ──────────────────────────────────────────────────────────────
+async function checkHealth() {
+  try {
+    const d = await fetch('/api/health', {signal: AbortSignal.timeout(4000)}).then(r=>r.json());
+    document.getElementById('api-dot').className = 'tb-status-dot ok';
+    document.getElementById('api-label').textContent = 'API online';
+    document.getElementById('wpt-count').textContent = d.waypoints_loaded.toLocaleString() + ' wpts';
+  } catch {
+    document.getElementById('api-dot').className = 'tb-status-dot err';
+    document.getElementById('api-label').textContent = 'API offline';
+    showToast('Cannot reach backend — make sure Flask is running on port 5000');
+  }
+}
+
+
+// ── Analyze ───────────────────────────────────────────────────────────────────
+async function analyzeNotam() {
+  const text = document.getElementById('notam-input').value.trim();
+  if (!text) { showToast('Please paste NOTAM text first'); return; }
+  const btn = document.getElementById('btn-analyze');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Analyzing...';
+  setStatus('Sending to server...', 'busy');
+  clearMap();
+  try {
+    const resp = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({notam: text}),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!resp.ok) { const e=await resp.json().catch(()=>({})); throw new Error(e.error||`Server ${resp.status}`); }
+    const data = await resp.json();
+    renderResults(data);
+    setStatus(`${data.total_segments} segment(s) plotted — click a card to zoom`, 'ok');
+  } catch(e) {
+    setStatus('Error — '+e.message, 'idle');
+    showToast('Error: '+e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = 'Analyze';
+  }
+}
+
+
+// ── Point type helpers ────────────────────────────────────────────────────────
+function isCalcPoint(pt) {
+  return pt.type === 'coord' || pt.type === 'dist_dir';
+}
+
+
+function ptWptClass(pt) {
+  if (pt.type === 'dist_dir') return 'distdir';
+  if (pt.type === 'coord')    return 'resolved';
+  return 'named';
+}
+
+
+function ptMarkerColor(pt) {
+  if (pt.type === 'dist_dir') return '#f5a623';
+  if (pt.type === 'coord')    return '#e040fb';
+  return '#1a7a4a';
+}
+
+
+// ── Render results ────────────────────────────────────────────────────────────
+function renderResults(data) {
+  document.getElementById('meta-section').style.display = 'block';
+  document.getElementById('meta-id').textContent   = data.notam_id || '—';
+
+
+  currentSegments = data.segments || [];
+  document.getElementById('seg-count').textContent =
+    currentSegments.length ? `(${currentSegments.length})` : '';
+
+
+  const list = document.getElementById('seg-list');
+  if (!currentSegments.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">⚠</div>No airway segments detected.</div>';
+    return;
+  }
+
+
+  list.innerHTML = '';
+  const bounds = [];
+  const routeWpts = {};
+
+
+  currentSegments.forEach((seg, i) => {
+    const ptA = seg.point_a;
+    const ptB = seg.point_b;
+    
+    const warnings = [];
+    // dist_dir but not resolved → warning
+    if (ptA.type === 'dist_dir' && !ptA.display_lat) {
+      warnings.push(`Invalid anchor: ${ptA.fix_name || ptA.raw}`);
+    }
+    if (ptB.type === 'dist_dir' && !ptB.display_lat) {
+      warnings.push(`Invalid anchor: ${ptB.fix_name || ptB.raw}`);
+    }
+
+    const nameA = ptA.display_name || ptA.name || ptA.raw || '?';
+    const nameB = ptB.display_name || ptB.name || ptB.raw || '?';
+    const latA  = ptA.display_lat,  lonA = ptA.display_lon;
+    const latB  = ptB.display_lat,  lonB = ptB.display_lon;
+    const firA  = ptA.display_fir || '', firB = ptB.display_fir || '';
+
+
+    const distParts = [];
+    if (isCalcPoint(ptA) && ptA.nearest) {
+      const tag = ptA.type === 'dist_dir'
+        ? `${ptA.dist_nm}NM ${ptA.bearing}° from ${ptA.fix_name}`
+        : ptA.raw;
+      distParts.push(`${tag} → ${nameA} (${ptA.nearest.distance_nm} NM)`);
+    }
+    if (isCalcPoint(ptB) && ptB.nearest) {
+      const tag = ptB.type === 'dist_dir'
+        ? `${ptB.dist_nm}NM ${ptB.bearing}° from ${ptB.fix_name}`
+        : ptB.raw;
+      distParts.push(`${tag} → ${nameB} (${ptB.nearest.distance_nm} NM)`);
+    }
+
+
+    const firs = [...new Set([firA,firB].filter(Boolean))].join(' / ');
+
+
+    const card = document.createElement('div');
+    card.className = 'seg-card';
+    card.dataset.idx = i;
+    card.innerHTML = `
+      <div class="seg-route">${esc(seg.route)}</div>
+      <div class="seg-path">
+        <span class="seg-wpt ${ptWptClass(ptA)}">${esc(nameA)}</span>
+        <span class="seg-arrow">→</span>
+        <span class="seg-wpt ${ptWptClass(ptB)}">${esc(nameB)}</span>
+      </div>
+      <span class="seg-badge">CLOSED</span>
+      ${firs?`<div class="seg-dist">FIR: ${esc(firs)}</div>`:''}
+      ${distParts.length?`<div class="seg-dist">${distParts.map(esc).join('<br>')}</div>`:''}
+      ${warnings.length ? `<div class="seg-dist" style="color:#e24b4a;font-weight:600">⚠ ${warnings.map(esc).join('<br>')}
+        </div>` : ''}
+
+      <div style="margin-top:7px">
+        <button data-seg="${i}" class="sky-btn"
+          style="background:transparent;border:1px solid #3060d0;border-radius:4px;color:#3060d0;font-family:JetBrains Mono,monospace;font-size:9px;font-weight:600;padding:2px 8px;cursor:pointer;letter-spacing:.05em">
+          ↗ Open in SkyVector
+        </button>
+      </div>
+    `;
+    card.onclick = (e) => {
+      if (e.target.classList.contains('sky-btn')) return;
+      activateSegment(i, card);
+    };
+    list.appendChild(card);
+
+
+    if (!routeWpts[seg.route]) routeWpts[seg.route] = [];
+    if (latA!=null) routeWpts[seg.route].push({name:nameA, lat:latA, lon:lonA});
+    if (latB!=null) routeWpts[seg.route].push({name:nameB, lat:latB, lon:lonB});
+
+
+    const pts = [];
+    if (latA!=null && lonA!=null) { pts.push([latA,lonA]); bounds.push([latA,lonA]); }
+    if (latB!=null && lonB!=null) { pts.push([latB,lonB]); bounds.push([latB,lonB]); }
+
+
+    if (pts.length >= 2) {
+      const closedLine = L.polyline(pts, {color:'#e040fb', weight:4, opacity:.95});
+      closedLine.addTo(map); polylines.push(closedLine);
+
+
+      const midLat = (pts[0][0]+pts[1][0])/2;
+      const midLon = (pts[0][1]+pts[1][1])/2;
+      const distNm = haversineNM(pts[0][0],pts[0][1],pts[1][0],pts[1][1]);
+      const bearing = getBearing(pts[0][0],pts[0][1],pts[1][0],pts[1][1]);
+      const lbl = L.divIcon({
+        html:`<div style="background:rgba(255,255,255,.92);border:1.5px solid #e040fb;border-radius:10px;padding:2px 8px;font-family:JetBrains Mono,monospace;font-size:10px;color:#8800cc;font-weight:600;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.2)">${bearing.toFixed(0).padStart(3,'0')}° ${distNm.toFixed(0)}nm</div>`,
+        iconSize:[90,20], iconAnchor:[45,10], className:''
+      });
+      const lm = L.marker([midLat,midLon], {icon:lbl, interactive:false});
+      lm.addTo(map); markers.push(lm);
+    }
+
+
+    const addWpt = (lat, lon, name, pt, fir) => {
+      if (lat==null||lon==null) return;
+      const color = ptMarkerColor(pt);
+      const shape = pt.type === 'waypoint' ? 'diamond' : 'circle';
+      const sub   = isCalcPoint(pt)
+        ? (pt.type === 'dist_dir' ? `${pt.dist_nm}NM ${dirLabel(pt.bearing)} of ${pt.fix_name}` : `≈ ${pt.raw}`)
+        : (fir||'');
+      const m = makeWptMarker(lat, lon, name, color, shape, sub);
+      m.addTo(map); markers.push(m);
+    };
+    // ✅ ONLY show for actual coordinate NOTAMs
+    const addOrigPoint = (pt) => {
+      if (pt.type !== 'coord') return;
+      const origLat = pt.orig_lat ?? pt.lat;
+      const origLon = pt.orig_lon ?? pt.lon;
+      if (origLat == null || origLon == null) return;
+      if (pt.display_lat != null &&
+          Math.abs(origLat - pt.display_lat) < 0.0001 &&
+          Math.abs(origLon - pt.display_lon) < 0.0001) return;
+      const label = pt.type === 'dist_dir'
+        ? `${pt.dist_nm}NM ${dirLabel(pt.bearing)}`
+        : pt.raw;
+      const m = makeCoordMarker(origLat, origLon, label);
+      m.addTo(map); markers.push(m);
+      bounds.push([origLat, origLon]);
+    };
+
+
+    addWpt(latA, lonA, nameA, ptA, firA);
+    addOrigPoint(ptA);
+    addWpt(latB, lonB, nameB, ptB, firB);
+    addOrigPoint(ptB);
+  });
+
+
+  Object.entries(routeWpts).forEach(([route, wpts]) => {
+    if (wpts.length < 2) return;
+    const seen = new Set(), uniq = [];
+    wpts.forEach(w => { if (!seen.has(w.name)) { seen.add(w.name); uniq.push(w); } });
+    if (uniq.length < 2) return;
+    const pts = uniq.map(w => [w.lat, w.lon]);
+    const bgLine = L.polyline(pts, {color:'#3060d0', weight:2, opacity:.5});
+    bgLine.addTo(map); polylines.push(bgLine);
+
+
+    const mid = Math.floor(pts.length/2);
+    const lbl = L.divIcon({
+      html:`<div style="background:rgba(255,255,255,.85);border:1px solid #3060d0;border-radius:3px;padding:1px 5px;font-family:JetBrains Mono,monospace;font-size:9px;color:#1a3a8c;font-weight:700">${esc(route)}</div>`,
+      iconSize:[40,14], iconAnchor:[20,7], className:''
+    });
+    const lm = L.marker(pts[mid], {icon:lbl, interactive:false});
+    lm.addTo(map); markers.push(lm);
+  });
+
+
+  if (bounds.length) map.fitBounds(bounds, {padding:[80,80]});
+}
+
+
+// ── Waypoint marker ───────────────────────────────────────────────────────────
+function makeWptMarker(lat, lon, label, color, shape, sub) {
+  const shapeHtml = shape === 'diamond'
+    ? `<div style="width:10px;height:10px;background:${color};transform:rotate(45deg);border:1.5px solid rgba(0,0,0,.3);margin:2px auto"></div>`
+    : `<div style="width:11px;height:11px;border-radius:50%;background:${color};border:2px solid rgba(0,0,0,.3);margin:1px auto"></div>`;
+
+
+  const icon = L.divIcon({
+    html:`<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none">
+      ${shapeHtml}
+      <div style="background:rgba(255,255,255,.95);color:#1a3a5c;font-family:JetBrains Mono,monospace;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-top:2px;white-space:nowrap;border:1px solid rgba(0,0,0,.15);box-shadow:0 1px 3px rgba(0,0,0,.15)">${esc(label)}</div>
+      ${sub?`<div style="background:rgba(255,255,255,.85);color:#666;font-family:JetBrains Mono,monospace;font-size:8px;padding:0px 4px;border-radius:2px;margin-top:1px;white-space:nowrap">${esc(sub)}</div>`:''}
+    </div>`,
+    iconSize:[80,50], iconAnchor:[40,6], className:''
+  });
+  const m = L.marker([lat, lon], {icon});
+  m.bindPopup(`<div class="lf-popup">
+    <div class="lf-popup-title">${esc(label)}</div>
+    <div class="lf-popup-row"><span>Lat</span><span>${lat.toFixed(5)}°</span></div>
+    <div class="lf-popup-row"><span>Lon</span><span>${lon.toFixed(5)}°</span></div>
+    ${sub?`<div class="lf-popup-row"><span>Note</span><span>${esc(sub)}</span></div>`:''}
+  </div>`, {maxWidth:220});
+  return m;
+}
+
+
+// ── Original calculated point marker ──────────────────────────────────────────
+function makeCoordMarker(lat, lon, label) {
+  const icon = L.divIcon({
+    html:`<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none">
+      <div style="width:10px;height:10px;background:#00d4aa;border-radius:50%;border:2px solid rgba(0,0,0,.3);margin:1px auto"></div>
+      <div style="background:rgba(255,255,255,.95);color:#1a3a5c;font-family:JetBrains Mono,monospace;font-size:9px;font-weight:700;padding:1px 5px;border-radius:3px;margin-top:2px;white-space:nowrap;border:1px solid rgba(0,0,0,.15);box-shadow:0 1px 3px rgba(0,0,0,.15)">${esc(label)}</div>
+    </div>`,
+    iconSize:[100,50], iconAnchor:[50,6], className:''
+  });
+  const m = L.marker([lat, lon], {icon});
+  m.bindPopup(`<div class="lf-popup">
+    <div class="lf-popup-title">${esc(label)}</div>
+    <div class="lf-popup-row"><span>Lat</span><span>${lat.toFixed(5)}°</span></div>
+    <div class="lf-popup-row"><span>Lon</span><span>${lon.toFixed(5)}°</span></div>
+  </div>`, {maxWidth:200});
+  return m;
+}
+
+
+// ── Activate segment (click to zoom) ─────────────────────────────────────────
+function activateSegment(idx, card) {
+  document.querySelectorAll('.seg-card').forEach(c => c.classList.remove('active'));
+  card.classList.add('active');
+  const seg = currentSegments[idx];
+  const pts = [];
+  [seg.point_a, seg.point_b].forEach(pt => {
+    if (pt.display_lat != null) pts.push([pt.display_lat, pt.display_lon]);
+    if (pt.orig_lat != null && pt.type === 'dist_dir') pts.push([pt.orig_lat, pt.orig_lon]);
+  });
+  if (pts.length) map.fitBounds(pts, {padding:[120,120]});
+}
+
+
+// ── SkyVector ─────────────────────────────────────────────────────────────────
+document.addEventListener('click', (e) => {
+  if (!e.target.classList.contains('sky-btn')) return;
+
+  const segIdx = parseInt(e.target.dataset.seg);
+  const seg = currentSegments[segIdx];
+  if (!seg) return;
+
+  function toSkyVectorCoord(lat, lon) {
+    if (lat == null || lon == null) return '';
+
+    const latDeg = Math.floor(Math.abs(lat));
+    const latMin = Math.floor((Math.abs(lat) - latDeg) * 60);
+
+    const lonDeg = Math.floor(Math.abs(lon));
+    const lonMin = Math.floor((Math.abs(lon) - lonDeg) * 60);
+
+    const latHem = lat >= 0 ? 'N' : 'S';
+    const lonHem = lon >= 0 ? 'E' : 'W';
+
+    return `${String(latDeg).padStart(2, '0')}${String(latMin).padStart(2, '0')}${latHem}` +
+           `${String(lonDeg).padStart(3, '0')}${String(lonMin).padStart(2, '0')}${lonHem}`;
+  }
+  const fmtPt = (pt) => {
+    // ✅ CASE 1: Original coordinate NOTAM → ALWAYS use original coord
+    if (pt.type === 'coord' && pt.orig_lat != null) {
+      return toSkyVectorCoord(pt.orig_lat, pt.orig_lon);
+  }
+  
+  // ✅ 2. DIST_DIR → NEVER use raw text (THIS FIXES YOUR ISSUE)
+  if (pt.type === 'dist_dir') {
+    if (pt.display_lat != null && pt.display_lon != null) {
+      return toSkyVectorCoord(pt.display_lat, pt.display_lon);
+    }
+    return ''; // ❌ STOP → don't return raw
+  }
+
+  const name = pt.display_name || pt.name || pt.raw || '';
+  // ✅ CASE 3: Short ambiguous name → coord
+  if (name.length <= 4 && pt.display_lat != null) {
+    return toSkyVectorCoord(pt.display_lat, pt.display_lon);
+  }
+  return name;
+  };
+
+
+  const a = fmtPt(seg.point_a);
+  const b = fmtPt(seg.point_b);
+  
+  if (!a || !b) {
+    showToast('Cannot open SkyVector: unresolved or invalid NOTAM point');
+    return;
+  }
+
+  const plan = encodeURIComponent(`${a} ${b}`);
+  window.open(`https://skyvector.com/?fpl=${plan}`, '_blank', 'noopener');
+});
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function dirLabel(bearing) {
+  const dirs = ['N','NE','E','SE','S','SW','W','NW'];
+  return dirs[Math.round(bearing/45) % 8];
+}
+function clearMap() {
+  markers.forEach(m => m.remove()); markers=[];
+  polylines.forEach(p => p.remove()); polylines=[];
+}
+function clearAll() {
+  clearMap();
+  document.getElementById('notam-input').value='';
+  document.getElementById('seg-list').innerHTML='<div class="empty"><div class="empty-icon">✈</div>Paste a NOTAM and click Analyze.</div>';
+  document.getElementById('meta-section').style.display='none';
+  document.getElementById('seg-count').textContent='';
+  setStatus('Ready','idle');
+}
+function haversineNM(lat1,lon1,lat2,lon2) {
+  const R=3440.065, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+function getBearing(lat1,lon1,lat2,lon2) {
+  const φ1=lat1*Math.PI/180, φ2=lat2*Math.PI/180, Δλ=(lon2-lon1)*Math.PI/180;
+  const y=Math.sin(Δλ)*Math.cos(φ2);
+  const x=Math.cos(φ1)*Math.sin(φ2)-Math.sin(φ1)*Math.cos(φ2)*Math.cos(Δλ);
+  return (Math.atan2(y,x)*180/Math.PI+360)%360;
+}
+function esc(str) {
+  if(!str) return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatDt(s) {
+  if(!s||s.length<10) return '—';
+  return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)} ${s.slice(8,10)}:${s.slice(10,12)}Z`;
+}
+
+
+window.addEventListener('DOMContentLoaded', () => {
+  initMap(); checkHealth(); setInterval(checkHealth, 30000);
+});
+</script>
+</body>
+</html>

@@ -1886,11 +1886,13 @@ def server_error(e):
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    DEFAULT_WAYPOINT_PATH = Path("data/wavepoints.csv")
+    DEFAULT_WAYPOINT_PATH = Path(__file__).resolve().parent.parent / "data" / "wavepoints.csv"
     DATA_PATH = os.environ.get("WAYPOINT_CSV", str(DEFAULT_WAYPOINT_PATH))
 
-    count = load_waypoints(DATA_PATH)
+    print("WAYPOINT_CSV resolved to:", Path(DATA_PATH).resolve())
+    print("WAYPOINT_CSV exists:", Path(DATA_PATH).exists())
 
+    count = load_waypoints(DATA_PATH)
     if count == 0:
         log.warning("Waypoint dataset could not be loaded. App is starting in degraded mode.")
 

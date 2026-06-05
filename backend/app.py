@@ -102,6 +102,7 @@ def load_waypoints(csv_path: str) -> int:
     names, coords, meta = [], [], []
     skipped = 0
 
+
     # ---------- FORMAT DETECTION ----------
     is_your_format = (
         len(header) >= 4
@@ -250,6 +251,16 @@ def load_waypoints(csv_path: str) -> int:
 
     return len(names)
 
+# ── Waypoint bootstrap (must run for both local Flask and Gunicorn) ──────────
+DEFAULT_WAYPOINT_PATH = Path(__file__).resolve().parent.parent / "data" / "wavepoints.csv"
+DATA_PATH = os.environ.get("WAYPOINT_CSV", str(DEFAULT_WAYPOINT_PATH))
+
+log.info("Waypoint CSV path: %s", DATA_PATH)
+log.info("Waypoint CSV exists: %s", Path(DATA_PATH).exists())
+
+count = load_waypoints(DATA_PATH)
+if count == 0:
+    log.warning("Waypoint dataset could not be loaded. App is starting in degraded mode.")
 
 # ── Coordinate parsers ────────────────────────────────────────────────────────
 def _parse_coord_str(s: str) -> tuple[float, float] | None:
@@ -1886,15 +1897,5 @@ def server_error(e):
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    DEFAULT_WAYPOINT_PATH = Path(__file__).resolve().parent.parent / "data" / "wavepoints.csv"
-    DATA_PATH = os.environ.get("WAYPOINT_CSV", str(DEFAULT_WAYPOINT_PATH))
-
-    print("WAYPOINT_CSV resolved to:", Path(DATA_PATH).resolve())
-    print("WAYPOINT_CSV exists:", Path(DATA_PATH).exists())
-
-    count = load_waypoints(DATA_PATH)
-    if count == 0:
-        log.warning("Waypoint dataset could not be loaded. App is starting in degraded mode.")
-
     debug = os.environ.get("FLASK_DEBUG", "false").lower() == "true"
     app.run(host="0.0.0.0", port=int(os.environ.get("PORT", 5000)), debug=debug)

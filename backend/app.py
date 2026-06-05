@@ -1886,7 +1886,7 @@ def server_error(e):
 
 # ── Startup ───────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
-    DEFAULT_WAYPOINT_PATH = Path(__file__).parent.parent / "data" / "wavepoints.csv"
+    DEFAULT_WAYPOINT_PATH = Path("data/wavepoints.csv")
     DATA_PATH = os.environ.get("WAYPOINT_CSV", str(DEFAULT_WAYPOINT_PATH))
 
     count = load_waypoints(DATA_PATH)

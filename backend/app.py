@@ -321,7 +321,7 @@ def parse_coord(coord_str: str) -> dict | None:
 
 
 # ── Waypoint bootstrap (must run for both local Flask and Gunicorn) ──────────
-DEFAULT_WAYPOINT_PATH = Path(__file__).resolve().parent.parent / "data" / "wavepoints.csv"
+DEFAULT_WAYPOINT_PATH = Path(__file__).resolve().parent.parent / "data" / "waypoints.csv"
 DATA_PATH = os.environ.get("WAYPOINT_CSV", str(DEFAULT_WAYPOINT_PATH))
 
 log.info("Waypoint CSV path: %s", DATA_PATH)

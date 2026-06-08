@@ -1160,11 +1160,14 @@ KM_TO_NM = 0.539957
 
 
 DIST_DIR_RE = re.compile(
-    r'(\d+(?:\.\d+)?)\s*(KM|NM|NAUTICAL\s+MILES?)\s+'
-    r'(NORTH(?:EAST|WEST)?|SOUTH(?:EAST|WEST)?|EAST|WEST|NORTHEAST|NORTHWEST|SOUTHEAST|SOUTHWEST|[NSEW]{1,2})\s+'
+    r'(?P<dist>\d+(?:\.\d+)?)\s*(?P<unit>KM|NM|NAUTICAL\s+MILES?)\s+'
+    r'(?P<dir>NORTH(?:EAST|WEST)?|SOUTH(?:EAST|WEST)?|EAST|WEST|NORTHEAST|NORTHWEST|SOUTHEAST|SOUTHWEST|[NSEW]{1,2})\s+'
     r'OF\s+'
-    r'([A-Z][A-Z0-9\s]{1,20}?)'
-    r'(?:\s+VOR(?:/DME)?\s*\'?\s*([A-Z]{2,4})\'?)?'
+    r'(?:'
+        r'(?P<vor_name>[A-Z][A-Z0-9\s]{1,40}?)\s+VOR(?:/DME)?\s*\'?\s*(?P<vor_id>[A-Z]{2,4})\'?'
+        r'|'
+        r'(?P<fix>[A-Z][A-Z0-9\s]{1,20}?)'
+    r')'
     r'(?=\s*[-–.]|$)',
     re.IGNORECASE
 )
@@ -1172,16 +1175,29 @@ DIST_DIR_RE = re.compile(
 
 
 _DIST_DIR_TOKEN = (
-    r'(?:\d+(?:\.\d+)?[ ]*(?:KM|NM|NAUTICAL[ ]+MILES?)'
-    r'[ ]+(?:NORTH(?:EAST|WEST)?|SOUTH(?:EAST|WEST)?|EAST|WEST|NORTHEAST|NORTHWEST|SOUTHEAST|SOUTHWEST|[NSEW]{1,2})'
-    r'[ ]+OF[ ]+[A-Z][A-Z0-9 ]{1,20}'
-    r'(?:[ ]+VOR(?:/DME)?[ ]*\'?[ ]*[A-Z]{2,4}\'?)?)'
+    r'(?:'
+    r'\d+(?:\.\d+)?\s*(?:KM|NM|NAUTICAL\s+MILES?)'
+    r'\s+(?:NORTH(?:EAST|WEST)?|SOUTH(?:EAST|WEST)?|EAST|WEST|NORTHEAST|NORTHWEST|SOUTHEAST|SOUTHWEST|[NSEW]{1,2})'
+    r'\s+OF\s+'
+    r'(?:'
+        r'(?:[A-Z][A-Z0-9\s]{1,40}?\s+VOR(?:/DME)?\s*\'?\s*[A-Z]{2,4}\'?)'
+        r'|'
+        r'(?:[A-Z][A-Z0-9\s]{1,20})'
+    r')'
+    r')'
 )
 
 
 _COORD_TOKEN = (
-    r'(?:[NS]\d{6}[EW]\d{7}|[NS]\d{6}[EW]\d{6}|\d{6}[NS]\d{7}[EW]'
-    r'|[NS]\d{4}[EW]\d{5}|\d{4}[NS]\d{5}[EW]|\d{4}[NS]\d{4}[EW])'
+    r'(?:'
+    r'[NS]\d{6}\s*[EW]\d{7}'      # N401615 E1025934
+    r'|[NS]\d{6}\s*[EW]\d{6}'     # NDDMMSS EDDMMSS
+    r'|\d{6}[NS]\s*\d{7}[EW]'     # 401615N 1025934E
+    r'|\d{6}[NS]\s*\d{6}[EW]'     # 401615N 102934E
+    r'|[NS]\d{4}\s*[EW]\d{5}'     # NDDMM EDDDMM
+    r'|\d{4}[NS]\s*\d{5}[EW]'     # DDMMN DDDMME
+    r'|\d{4}[NS]\s*\d{4}[EW]'     # DDMMN DDMME
+    r')'
 )
 
 
@@ -1201,9 +1217,12 @@ ROUTE_SEG_RE = re.compile(
     re.IGNORECASE,
 )
 
+
 SEG_OF_RTE_RE = re.compile(
-    r'SEGMENT\s+(' + _POINT + r')\s*[-–]\s*(' + _POINT + r')'
-    r'(?=\s+OF\s+ATS\s+RTE\s+[A-Z0-9]{1,5})'
+    r'\bSEGMENT\s+(?:AWY\s+)?'
+    r'(?:\(\s*)?'
+    r'(' + _POINT + r')\s*-\s*(' + _POINT + r')'
+    r'(?:\s*\))?'
     r'\s+OF\s+ATS\s+RTE\s+([A-Z0-9]{1,5})',
     re.IGNORECASE,
 )
@@ -1221,6 +1240,42 @@ def sanitize_text(text: str) -> str:
     text = re.sub(r'[^\x20-\x7E\n\r\t]', '', text)
     return text[:8000]
 
+def normalize_notam_text_for_parsing(text: str) -> str:
+    """
+    Light normalization so regex extraction works for bracketed / AWY-prefixed
+    segment patterns and odd spacing, without changing meaning.
+    """
+    if not text:
+        return ""
+
+    # normalize dash variants
+    text = text.replace("–", "-").replace("—", "-")
+
+    # normalize repeated spaces/tabs but keep newlines
+    text = re.sub(r'[ \t]+', ' ', text)
+
+    # Case 1A:
+    # SEGMENT ( OSUPO-90KM WEST OF OSUPO ) OF ATS RTE A368
+    # -> SEGMENT OSUPO-90KM WEST OF OSUPO OF ATS RTE A368
+    text = re.sub(
+        r'(\bSEGMENT\s*)\(\s*(.*?)\s*\)(\s+OF\s+ATS\s+RTE\b)',
+        r'\1\2\3',
+        text,
+        flags=re.IGNORECASE | re.DOTALL
+    )
+
+    # Case 1C:
+    # SEGMENT AWY OSUPO-90KM WEST OF OSUPO OF ATS RTE A368
+    # -> SEGMENT OSUPO-90KM WEST OF OSUPO OF ATS RTE A368
+    text = re.sub(
+        r'\bSEGMENT\s+AWY\s+',
+        'SEGMENT ',
+        text,
+        flags=re.IGNORECASE
+    )
+
+    return text
+
 def _make_point(token: str) -> dict:
     token = re.sub(r'\s+', ' ', token.strip().upper())
     token = token.rstrip('.').strip()
@@ -1228,12 +1283,17 @@ def _make_point(token: str) -> dict:
     # Distance/direction pattern first
     m = DIST_DIR_RE.search(token)
     if m:
-        raw_dist = float(m.group(1))
-        unit     = m.group(2).upper().replace(" ", "")
-        dir_str  = m.group(3).upper()
-        fix_name = m.group(5).strip().upper() if m.group(5) else m.group(4).strip().upper()
-        fix_name = re.sub(r'\s+VOR(?:/DME)?.*$', '', fix_name).strip()
-
+        raw_dist = float(m.group("dist"))
+        unit     = m.group("unit").upper().replace(" ", "")
+        dir_str  = m.group("dir").upper()
+        
+        vor_id   = m.group("vor_id")
+        plain_fix = m.group("fix")
+        vor_name = m.group("vor_name")
+        
+        fix_name = (vor_id or plain_fix or "").strip().upper()
+        anchor_label = (vor_name or plain_fix or fix_name).strip().upper()
+        
         bearing  = DIR_BEARING.get(dir_str)
         dist_nm  = round(raw_dist * KM_TO_NM, 2) if unit == 'KM' else raw_dist
         dist_km  = raw_dist if unit == 'KM' else round(raw_dist / KM_TO_NM, 2)
@@ -1285,6 +1345,9 @@ def extract_segments(notam_text: str) -> list[dict]:
         token = re.sub(r'\s+BTN.*$', '', token, flags=re.IGNORECASE)
         token = re.sub(r'\s+FROM.*$', '', token, flags=re.IGNORECASE)
         token = re.sub(r'\s+AT\s+.*$', '', token, flags=re.IGNORECASE)
+        
+         # remove outer wrapper brackets if present
+        token = re.sub(r'^\(\s*(.*?)\s*\)$', r'\1', token)
 
         return token.strip(" .:-")
 
@@ -1445,6 +1508,7 @@ def analyze():
 
 
     notam_text = sanitize_text(raw_notam)
+    notam_text = normalize_notam_text_for_parsing(notam_text)
     notam_id   = (re.search(r'[A-Z]\d{4}/\d{2}', notam_text) or type('', (), {'group': lambda *a: 'UNKNOWN'})()).group(0)
     a_fir_m = re.search(r'A\)\s*([A-Z]{4})', notam_text)
     q_fir_m = re.search(r'Q\)\s*([A-Z]{4})', notam_text)

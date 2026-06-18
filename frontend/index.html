@@ -10,6 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet"/>
+
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -94,6 +95,41 @@ textarea::placeholder{color:var(--muted);opacity:.7}
 .btm-dot.busy{background:var(--amber);animation:pulse 1s infinite}
 #btm-text{font-family:var(--mono);font-size:11px;color:var(--muted)}
 .btm-right{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
+
+.copy-box{
+  margin-top:8px;
+  border:2px solid #22c55e;
+  border-radius:14px;
+  padding:8px 10px 6px;
+  text-align:center;
+  background:rgba(34,197,94,.05);
+}
+
+.copy-text{
+  font-family:var(--mono);
+  font-size:13px;
+  font-weight:700;
+  color:#22c55e;
+  line-height:1.25;
+  word-break:break-word;
+}
+
+.copy-btn{
+  margin-top:4px;
+  background:transparent;
+  border:none;
+  color:#ff3b3b;
+  font-family:var(--sans);
+  font-size:13px;
+  font-weight:700;
+  cursor:pointer;
+  line-height:1.1;
+  padding:0;
+}
+
+.copy-btn:hover{
+  opacity:.85;
+}
 </style>
 </head>
 <body>
@@ -173,7 +209,8 @@ textarea::placeholder{color:var(--muted);opacity:.7}
 
 
 let map, markers=[], polylines=[], currentSegments=[], allWaypointMeta=[];
-
+let segmentLayers = [];
+let activeSegmentIndex = null;
 
 // ── Map init ──────────────────────────────────────────────────────────────────
 function initMap() {
@@ -262,6 +299,8 @@ function ptMarkerColor(pt) {
 
 // ── Render results ────────────────────────────────────────────────────────────
 function renderResults(data) {
+  segmentLayers = [];
+  activeSegmentIndex = null;
   document.getElementById('meta-section').style.display = 'block';
   document.getElementById('meta-id').textContent   = data.notam_id || '—';
 
@@ -320,7 +359,7 @@ function renderResults(data) {
 
     const firs = [...new Set([firA,firB].filter(Boolean))].join(' / ');
 
-
+    const copyOutput = `${seg.route} ${nameA}-${nameB}`;
     const card = document.createElement('div');
     card.className = 'seg-card';
     card.dataset.idx = i;
@@ -343,10 +382,21 @@ function renderResults(data) {
           ↗ Open in SkyVector
         </button>
       </div>
+    
+      <div class="copy-box">
+        <div class="copy-text">${esc(copyOutput)}</div>
+        <button class="copy-btn" data-copy="${esc(copyOutput)}">Copy</button>
+      </div>
     `;
+
     card.onclick = (e) => {
       if (e.target.classList.contains('sky-btn')) return;
       activateSegment(i, card);
+    };
+    card.ondblclick = (e) => {
+      if (e.target.classList.contains('sky-btn')) return;
+      e.preventDefault();
+      resetSegmentStyles();
     };
     list.appendChild(card);
 
@@ -362,33 +412,51 @@ function renderResults(data) {
 
 
     if (pts.length >= 2) {
-      const closedLine = L.polyline(pts, {color:'#e040fb', weight:4, opacity:.95});
-      closedLine.addTo(map); polylines.push(closedLine);
-
-
-      const midLat = (pts[0][0]+pts[1][0])/2;
-      const midLon = (pts[0][1]+pts[1][1])/2;
-      const distNm = haversineNM(pts[0][0],pts[0][1],pts[1][0],pts[1][1]);
-      const bearing = getBearing(pts[0][0],pts[0][1],pts[1][0],pts[1][1]);
-      const lbl = L.divIcon({
-        html:`<div style="background:rgba(255,255,255,.92);border:1.5px solid #e040fb;border-radius:10px;padding:2px 8px;font-family:JetBrains Mono,monospace;font-size:10px;color:#8800cc;font-weight:600;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.2)">${bearing.toFixed(0).padStart(3,'0')}° ${distNm.toFixed(0)}nm</div>`,
-        iconSize:[90,20], iconAnchor:[45,10], className:''
+      const closedLine = L.polyline(pts, {
+        color: '#e040fb',
+        weight: 4,
+        opacity: 0.95
       });
-      const lm = L.marker([midLat,midLon], {icon:lbl, interactive:false});
-      lm.addTo(map); markers.push(lm);
+      closedLine.addTo(map);
+      polylines.push(closedLine);
+      
+      // store this segment so we can highlight it later
+      segmentLayers.push({
+        segIndex: i,
+        layer: closedLine,
+        type: 'closed'
+      });
+      const midLat = (pts[0][0] + pts[1][0]) / 2;
+      const midLon = (pts[0][1] + pts[1][1]) / 2;
+      const distNm = haversineNM(pts[0][0], pts[0][1], pts[1][0], pts[1][1]);
+      const bearing = getBearing(pts[0][0], pts[0][1], pts[1][0], pts[1][1]);
+      
+      const lbl = L.divIcon({
+        html:`<div style="background:rgba(255,255,255,.92);border:1.5px solid #e040fb;border-radius:10px;padding:2px 8px;font-family:JetBrains Mono,monospace;font-size:10px;color:#8800cc;font-weight:600;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,.2)">${esc(seg.route)} · ${bearing.toFixed(0).padStart(3,'0')}° ${distNm.toFixed(0)}nm</div>`,
+        iconSize:[150,20],
+        iconAnchor:[75,10],
+        className:''
+      });
+      
+      const lm = L.marker([midLat, midLon], {icon: lbl, interactive: false});
+      lm.addTo(map);
+      markers.push(lm);
     }
-
-
+    
     const addWpt = (lat, lon, name, pt, fir) => {
-      if (lat==null||lon==null) return;
+      if (lat == null || lon == null) return;
+      
       const color = ptMarkerColor(pt);
       const shape = pt.type === 'waypoint' ? 'diamond' : 'circle';
-      const sub   = isCalcPoint(pt)
-        ? (pt.type === 'dist_dir' ? `${pt.dist_nm}NM ${dirLabel(pt.bearing)} of ${pt.fix_name}` : `≈ ${pt.raw}`)
-        : (fir||'');
-      const m = makeWptMarker(lat, lon, name, color, shape, sub);
-      m.addTo(map); markers.push(m);
+      const sub = fir || '';
+      
+      const cleanName = String(name || '').trim();
+      const m = makeWptMarker(lat, lon, cleanName, color, shape, sub);
+      m.addTo(map);
+      markers.push(m);
     };
+
+
     // ✅ ONLY show for actual coordinate NOTAMs
     const addOrigPoint = (pt) => {
       if (pt.type !== 'coord') return;
@@ -424,13 +492,6 @@ function renderResults(data) {
     bgLine.addTo(map); polylines.push(bgLine);
 
 
-    const mid = Math.floor(pts.length/2);
-    const lbl = L.divIcon({
-      html:`<div style="background:rgba(255,255,255,.85);border:1px solid #3060d0;border-radius:3px;padding:1px 5px;font-family:JetBrains Mono,monospace;font-size:9px;color:#1a3a8c;font-weight:700">${esc(route)}</div>`,
-      iconSize:[40,14], iconAnchor:[20,7], className:''
-    });
-    const lm = L.marker(pts[mid], {icon:lbl, interactive:false});
-    lm.addTo(map); markers.push(lm);
   });
 
 
@@ -444,22 +505,25 @@ function makeWptMarker(lat, lon, label, color, shape, sub) {
     ? `<div style="width:10px;height:10px;background:${color};transform:rotate(45deg);border:1.5px solid rgba(0,0,0,.3);margin:2px auto"></div>`
     : `<div style="width:11px;height:11px;border-radius:50%;background:${color};border:2px solid rgba(0,0,0,.3);margin:1px auto"></div>`;
 
-
   const icon = L.divIcon({
     html:`<div style="display:flex;flex-direction:column;align-items:center;pointer-events:none">
       ${shapeHtml}
       <div style="background:rgba(255,255,255,.95);color:#1a3a5c;font-family:JetBrains Mono,monospace;font-size:10px;font-weight:700;padding:1px 5px;border-radius:3px;margin-top:2px;white-space:nowrap;border:1px solid rgba(0,0,0,.15);box-shadow:0 1px 3px rgba(0,0,0,.15)">${esc(label)}</div>
-      ${sub?`<div style="background:rgba(255,255,255,.85);color:#666;font-family:JetBrains Mono,monospace;font-size:8px;padding:0px 4px;border-radius:2px;margin-top:1px;white-space:nowrap">${esc(sub)}</div>`:''}
+      ${sub ? `<div style="background:rgba(255,255,255,.85);color:#666;font-family:JetBrains Mono,monospace;font-size:8px;padding:0px 4px;border-radius:2px;margin-top:1px;white-space:nowrap">${esc(sub)}</div>` : ''}
     </div>`,
-    iconSize:[80,50], iconAnchor:[40,6], className:''
+    iconSize:[80,50],
+    iconAnchor:[40,6],
+    className:''
   });
+
   const m = L.marker([lat, lon], {icon});
   m.bindPopup(`<div class="lf-popup">
     <div class="lf-popup-title">${esc(label)}</div>
     <div class="lf-popup-row"><span>Lat</span><span>${lat.toFixed(5)}°</span></div>
     <div class="lf-popup-row"><span>Lon</span><span>${lon.toFixed(5)}°</span></div>
-    ${sub?`<div class="lf-popup-row"><span>Note</span><span>${esc(sub)}</span></div>`:''}
+    ${sub ? `<div class="lf-popup-row"><span>FIR</span><span>${esc(sub)}</span></div>` : ''}
   </div>`, {maxWidth:220});
+
   return m;
 }
 
@@ -482,23 +546,74 @@ function makeCoordMarker(lat, lon, label) {
   return m;
 }
 
+function resetSegmentStyles() {
+  segmentLayers.forEach(rec => {
+    if (rec.type !== 'closed') return;
+    rec.layer.setStyle({
+      color: '#e040fb',
+      weight: 4,
+      opacity: 0.95
+    });
+  });
+
+  document.querySelectorAll('.seg-card').forEach(c => c.classList.remove('active'));
+  activeSegmentIndex = null;
+}
 
 // ── Activate segment (click to zoom) ─────────────────────────────────────────
 function activateSegment(idx, card) {
   document.querySelectorAll('.seg-card').forEach(c => c.classList.remove('active'));
   card.classList.add('active');
+  activeSegmentIndex = idx;
+
+  segmentLayers.forEach(rec => {
+    if (rec.type !== 'closed') return;
+
+    if (rec.segIndex === idx) {
+      rec.layer.setStyle({
+        color: '#00e5ff',
+        weight: 7,
+        opacity: 1
+      });
+      rec.layer.bringToFront();
+    } else {
+      rec.layer.setStyle({
+        color: '#e040fb',
+        weight: 3,
+        opacity: 0.20
+      });
+    }
+  });
+
   const seg = currentSegments[idx];
   const pts = [];
   [seg.point_a, seg.point_b].forEach(pt => {
     if (pt.display_lat != null) pts.push([pt.display_lat, pt.display_lon]);
     if (pt.orig_lat != null && pt.type === 'dist_dir') pts.push([pt.orig_lat, pt.orig_lon]);
   });
-  if (pts.length) map.fitBounds(pts, {padding:[120,120]});
+
+  if (pts.length) {
+    map.fitBounds(pts, {padding:[120,120]});
+  }
 }
 
 
 // ── SkyVector ─────────────────────────────────────────────────────────────────
-document.addEventListener('click', (e) => {
+document.addEventListener('click', async (e) => {
+  // Copy button
+  if (e.target.classList.contains('copy-btn')) {
+    const text = e.target.dataset.copy || '';
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      showToast(`Copied: ${text}`);
+    } catch {
+      showToast('Copy failed');
+    }
+    return;
+  }
+
+  // SkyVector button
   if (!e.target.classList.contains('sky-btn')) return;
 
   const segIdx = parseInt(e.target.dataset.seg);
@@ -563,6 +678,8 @@ function dirLabel(bearing) {
 function clearMap() {
   markers.forEach(m => m.remove()); markers=[];
   polylines.forEach(p => p.remove()); polylines=[];
+  segmentLayers = [];
+  activeSegmentIndex = null;
 }
 function clearAll() {
   clearMap();

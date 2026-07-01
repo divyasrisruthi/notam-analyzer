@@ -34,8 +34,19 @@ body{font-family:var(--sans);background:var(--navy);color:var(--text);height:100
 .tb-status-dot.err{background:var(--red)}
 @keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
 .wpt-count{font-family:var(--mono);font-size:10px;color:var(--muted);background:var(--navy3);border:1px solid var(--border);border-radius:4px;padding:2px 8px}
-.layout{display:grid;grid-template-columns:340px 1fr;flex:1;overflow:hidden}
-.panel{background:var(--navy2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow:hidden}
+.layout{display:flex;flex:1;overflow:hidden;}
+.panel{
+  width:380px;
+  min-width:320px;
+  max-width:620px;
+  background:var(--navy2);
+  border-right:1px solid var(--border);
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  position:relative;
+  flex-shrink:0;
+}
 .p-section{padding:14px 16px;border-bottom:1px solid var(--border)}
 .p-label{font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin-bottom:10px}
 textarea{width:100%;height:160px;background:var(--navy3);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-family:var(--mono);font-size:11px;color:var(--text);resize:none;line-height:1.7;transition:border-color .2s;outline:none}
@@ -52,10 +63,24 @@ textarea::placeholder{color:var(--muted);opacity:.7}
 .meta-chip{background:var(--navy3);border:1px solid var(--border);border-radius:6px;padding:6px 10px}
 .meta-chip-label{font-family:var(--mono);font-size:9px;color:var(--muted);text-transform:uppercase;letter-spacing:.1em;margin-bottom:2px}
 .meta-chip-val{font-family:var(--mono);font-size:12px;color:var(--teal);font-weight:600}
-.seg-scroll{flex:1;overflow-y:auto;padding:10px}
+.seg-scroll{
+  flex:1;
+  overflow-y:auto;
+  padding:10px;
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap:10px;
+}
 .seg-scroll::-webkit-scrollbar{width:4px}
 .seg-scroll::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.seg-card{background:var(--navy3);border:1px solid var(--border);border-radius:8px;padding:11px 13px;margin-bottom:8px;cursor:pointer;transition:all .18s}
+.seg-card{
+  background:var(--navy3);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:10px;
+  cursor:pointer;
+  transition:all .18s;
+}
 .seg-card:hover{border-color:rgba(0,212,170,.4)}
 .seg-card.active{border-color:var(--teal);background:rgba(0,212,170,.07)}
 .seg-route{font-family:var(--mono);font-size:11px;font-weight:600;color:var(--teal);margin-bottom:5px}
@@ -66,14 +91,19 @@ textarea::placeholder{color:var(--muted);opacity:.7}
 .seg-wpt.resolved{background:rgba(224,64,251,.15);color:var(--magenta);border:1px solid rgba(224,64,251,.3)}
 .seg-wpt.distdir{background:rgba(245,166,35,.15);color:var(--amber);border:1px solid rgba(245,166,35,.3)}
 .seg-badge{display:inline-block;font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--red);background:rgba(226,75,74,.12);border-radius:4px;padding:2px 7px;margin-top:6px}
-.seg-dist{font-family:var(--mono);font-size:10px;color:var(--muted);margin-top:4px}
+.seg-dist{font-family:var(--mono);font-size:9px;color:var(--muted);margin-top:3px}
 .empty{padding:30px 16px;text-align:center;color:var(--muted);font-size:13px;line-height:1.8}
 .empty-icon{font-size:28px;margin-bottom:10px;opacity:.4}
 .spinner{display:inline-block;width:14px;height:14px;border:2px solid var(--border);border-top-color:var(--teal);border-radius:50%;animation:spin .7s linear infinite;margin-right:6px}
 @keyframes spin{to{transform:rotate(360deg)}}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(226,75,74,.15);border:1px solid var(--red);border-radius:8px;padding:10px 18px;font-size:13px;color:var(--red);z-index:9999;font-family:var(--mono);display:none;max-width:480px;text-align:center}
 .toast.show{display:block}
-.map-wrap{position:relative;overflow:hidden}
+.map-wrap{
+  position:relative;
+  overflow:hidden;
+  flex:1;
+  min-width:0;
+}
 #map{width:100%;height:100%}
 .leaflet-container{background:#d4e0f0}
 .leaflet-control-zoom a{background:#fff!important;color:#1a3a5c!important;border-color:#aac!important;font-weight:700}
@@ -96,40 +126,74 @@ textarea::placeholder{color:var(--muted);opacity:.7}
 #btm-text{font-family:var(--mono);font-size:11px;color:var(--muted)}
 .btm-right{margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--muted)}
 
-.copy-box{
-  margin-top:8px;
-  border:2px solid #22c55e;
-  border-radius:14px;
-  padding:8px 10px 6px;
-  text-align:center;
+.copy-all-section{
+  padding:8px 10px;
+  border-bottom:1px solid var(--border);
+  background:rgba(0,212,170,.03);
+}
+
+.copy-all-box{
+  border:1.5px solid #22c55e;
+  border-radius:10px;
+  padding:8px 10px;
   background:rgba(34,197,94,.05);
 }
 
-.copy-text{
+.copy-all-title{
   font-family:var(--mono);
-  font-size:13px;
+  font-size:10px;
   font-weight:700;
   color:#22c55e;
-  line-height:1.25;
-  word-break:break-word;
+  text-transform:uppercase;
+  letter-spacing:.08em;
+  margin-bottom:6px;
 }
 
-.copy-btn{
-  margin-top:4px;
-  background:transparent;
-  border:none;
-  color:#ff3b3b;
-  font-family:var(--sans);
-  font-size:13px;
+.copy-all-text{
+  font-family:var(--mono);
+  font-size:10px;
+  line-height:1.3;
+  color:#e0f0ff;
+  white-space:pre-wrap;
+  word-break:break-word;
+  margin:0;
+  max-height:76px;
+  overflow-y:auto;
+}
+
+.copy-all-btn{
+  margin-top:7px;
+  width:100%;
+  padding:6px 8px;
+  border-radius:7px;
+  border:1px solid #22c55e;
+  background:rgba(34,197,94,.12);
+  color:#22c55e;
+  font-family:var(--mono);
+  font-size:11px;
   font-weight:700;
   cursor:pointer;
-  line-height:1.1;
-  padding:0;
 }
 
-.copy-btn:hover{
-  opacity:.85;
+.copy-all-btn:hover{
+  background:rgba(34,197,94,.18);
 }
+
+#dragbar{
+  width:4px;
+  cursor:col-resize;
+  background:transparent;
+  position:absolute;
+  right:0;
+  top:0;
+  bottom:0;
+  z-index:200;
+}
+
+#dragbar:hover{
+  background:rgba(0,229,255,.4);
+}
+
 </style>
 </head>
 <body>
@@ -151,7 +215,8 @@ textarea::placeholder{color:var(--muted);opacity:.7}
 
 
 <main class="layout">
-  <aside class="panel">
+  <aside class="panel" id="sidebar">
+    <div id="dragbar"></div>
     <div class="p-section">
       <div class="p-label">NOTAM Input</div>
       <textarea id="notam-input" spellcheck="false" autocomplete="off"
@@ -174,6 +239,16 @@ textarea::placeholder{color:var(--muted);opacity:.7}
     <div class="p-section" style="border-bottom:none;padding-bottom:6px">
       <div class="p-label">Affected Segments <span id="seg-count" style="color:var(--teal)"></span></div>
     </div>
+    
+    <div class="copy-all-section" id="copy-all-section" style="display:none">
+      <div class="copy-all-box">
+        <div class="copy-all-title">Copy output for DS Portal</div>
+        <pre class="copy-all-text" id="copy-all-text"></pre>
+        <button class="copy-all-btn" id="copy-all-btn">Copy All</button>
+      </div>
+    </div>
+
+
     <div class="seg-scroll" id="seg-list">
       <div class="empty"><div class="empty-icon">✈</div>Paste a NOTAM and click Analyze.</div>
     </div>
@@ -308,10 +383,34 @@ function renderResults(data) {
   currentSegments = data.segments || [];
   document.getElementById('seg-count').textContent =
     currentSegments.length ? `(${currentSegments.length})` : '';
+  
+  const copyAllLines = currentSegments.map(seg => {
+  const ptA = seg.point_a || {};
+  const ptB = seg.point_b || {};
 
+  const nameA = ptA.display_name || ptA.name || ptA.raw || '?';
+  const nameB = ptB.display_name || ptB.name || ptB.raw || '?';
+
+  return `${seg.route} ${nameA}-${nameB}`;
+});
+
+const copyAllText = copyAllLines.join('\n');
+
+const copyAllSection = document.getElementById('copy-all-section');
+const copyAllTextEl = document.getElementById('copy-all-text');
+
+if (copyAllText) {
+  copyAllSection.style.display = 'block';
+  copyAllTextEl.textContent = copyAllText;
+} else {
+  copyAllSection.style.display = 'none';
+  copyAllTextEl.textContent = '';
+}
 
   const list = document.getElementById('seg-list');
   if (!currentSegments.length) {
+    document.getElementById('copy-all-section').style.display = 'none';
+    document.getElementById('copy-all-text').textContent = '';
     list.innerHTML = '<div class="empty"><div class="empty-icon">⚠</div>No airway segments detected.</div>';
     return;
   }
@@ -359,42 +458,43 @@ function renderResults(data) {
 
     const firs = [...new Set([firA,firB].filter(Boolean))].join(' / ');
 
-    const copyOutput = `${seg.route} ${nameA}-${nameB}`;
+
     const card = document.createElement('div');
     card.className = 'seg-card';
     card.dataset.idx = i;
     card.innerHTML = `
-      <div class="seg-route">${esc(seg.route)}</div>
-      <div class="seg-path">
-        <span class="seg-wpt ${ptWptClass(ptA)}">${esc(nameA)}</span>
-        <span class="seg-arrow">→</span>
-        <span class="seg-wpt ${ptWptClass(ptB)}">${esc(nameB)}</span>
-      </div>
-      <span class="seg-badge">CLOSED</span>
-      ${firs?`<div class="seg-dist">FIR: ${esc(firs)}</div>`:''}
-      ${distParts.length?`<div class="seg-dist">${distParts.map(esc).join('<br>')}</div>`:''}
-      ${warnings.length ? `<div class="seg-dist" style="color:#e24b4a;font-weight:600">⚠ ${warnings.map(esc).join('<br>')}
-        </div>` : ''}
-
-      <div style="margin-top:7px">
-        <button data-seg="${i}" class="sky-btn"
-          style="background:transparent;border:1px solid #3060d0;border-radius:4px;color:#3060d0;font-family:JetBrains Mono,monospace;font-size:9px;font-weight:600;padding:2px 8px;cursor:pointer;letter-spacing:.05em">
-          ↗ Open in SkyVector
-        </button>
-      </div>
-    
-      <div class="copy-box">
-        <div class="copy-text">${esc(copyOutput)}</div>
-        <button class="copy-btn" data-copy="${esc(copyOutput)}">Copy</button>
-      </div>
-    `;
+    <div class="seg-route">${esc(seg.route)}</div>
+    <div class="seg-path">
+    <span class="seg-wpt ${ptWptClass(ptA)}">${esc(nameA)}</span>
+    <span class="seg-arrow">→</span>
+    <span class="seg-wpt ${ptWptClass(ptB)}">${esc(nameB)}</span>
+    </div>
+    <span class="seg-badge">CLOSED</span>
+    ${firs ? `<div class="seg-dist">FIR: ${esc(firs)}</div>` : ''}
+    ${distParts.length ? `<div class="seg-dist">${distParts.map(esc).join('<br>')}</div>` : ''}
+    ${warnings.length ? `<div class="seg-dist" style="color:#e24b4a;font-weight:600">⚠ ${warnings.map(esc).join('<br>')}</div>` : ''}
+    <div style="margin-top:7px">
+      <button data-seg="${i}" class="sky-btn"
+      style="background:transparent;border:1px solid #3060d0;border-radius:4px;color:#3060d0;font-family:JetBrains Mono,monospace;font-size:9px;font-weight:600;padding:2px 8px;cursor:pointer;letter-spacing:.05em">
+      ↗ Open in SkyVector
+    </button>
+  </div>
+`;
+  
 
     card.onclick = (e) => {
-      if (e.target.classList.contains('sky-btn')) return;
+      if (
+        e.target.classList.contains('sky-btn')
+      ) return;
+      
       activateSegment(i, card);
     };
+    
     card.ondblclick = (e) => {
-      if (e.target.classList.contains('sky-btn')) return;
+      if (
+        e.target.classList.contains('sky-btn')
+      ) return;
+      
       e.preventDefault();
       resetSegmentStyles();
     };
@@ -600,17 +700,17 @@ function activateSegment(idx, card) {
 
 // ── SkyVector ─────────────────────────────────────────────────────────────────
 document.addEventListener('click', async (e) => {
-  // Copy button
-  if (e.target.classList.contains('copy-btn')) {
-    const text = e.target.dataset.copy || '';
-    if (!text) return;
-    try {
-      await navigator.clipboard.writeText(text);
-      showToast(`Copied: ${text}`);
-    } catch {
-      showToast('Copy failed');
-    }
-    return;
+  // Copy All button
+  if (e.target.id === 'copy-all-btn') {
+  const text = document.getElementById('copy-all-text').textContent.trim();
+  if (!text) return;
+  try {
+    await navigator.clipboard.writeText(text);
+    showToast('Copied all DS Portal output');
+  } catch {
+    showToast('Copy all failed');
+  }
+  return;
   }
 
   // SkyVector button
@@ -687,6 +787,8 @@ function clearAll() {
   document.getElementById('seg-list').innerHTML='<div class="empty"><div class="empty-icon">✈</div>Paste a NOTAM and click Analyze.</div>';
   document.getElementById('meta-section').style.display='none';
   document.getElementById('seg-count').textContent='';
+  document.getElementById('copy-all-section').style.display='none';
+  document.getElementById('copy-all-text').textContent='';
   setStatus('Ready','idle');
 }
 function haversineNM(lat1,lon1,lat2,lon2) {
@@ -709,6 +811,40 @@ function formatDt(s) {
   return `${s.slice(0,4)}-${s.slice(4,6)}-${s.slice(6,8)} ${s.slice(8,10)}:${s.slice(10,12)}Z`;
 }
 
+const sidebar = document.getElementById('sidebar');
+const dragbar = document.getElementById('dragbar');
+
+let isDragging = false;
+
+dragbar.addEventListener('mousedown', () => {
+  isDragging = true;
+  document.body.style.cursor = 'col-resize';
+});
+
+document.addEventListener('mousemove', (e) => {
+  if (!isDragging) return;
+
+  let newWidth = e.clientX;
+
+  // limits
+  if (newWidth < 280) newWidth = 280;
+  if (newWidth > 600) newWidth = 600;
+
+  sidebar.style.width = newWidth + 'px';
+  if (map) map.invalidateSize();
+});
+
+
+document.addEventListener('mouseup', () => {
+  if (!isDragging) return;
+
+  isDragging = false;
+  document.body.style.cursor = 'default';
+
+  setTimeout(() => {
+    if (map) map.invalidateSize();
+  }, 50);
+});
 
 window.addEventListener('DOMContentLoaded', () => {
   initMap(); checkHealth(); setInterval(checkHealth, 30000);

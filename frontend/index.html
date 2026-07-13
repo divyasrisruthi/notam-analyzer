@@ -194,6 +194,93 @@ textarea::placeholder{color:var(--muted);opacity:.7}
   background:rgba(0,229,255,.4);
 }
 
+/* Mode toggle */
+.mode-toggle{
+  display:flex;gap:6px;padding:10px 16px;
+  border-bottom:1px solid var(--border);background:var(--navy3);
+}
+.mode-btn{
+  flex:1;padding:7px 10px;border-radius:6px;
+  border:1px solid var(--border);background:transparent;
+  color:var(--muted);font-family:var(--mono);font-size:11px;
+  font-weight:600;letter-spacing:.05em;cursor:pointer;transition:all .15s;
+}
+.mode-btn:hover{border-color:var(--teal);color:var(--teal)}
+.mode-btn.active{background:rgba(0,212,170,.12);border-color:var(--teal);color:var(--teal)}
+
+/* KZ tile grid replaces the map area */
+.kz-view{
+  display:none;width:100%;height:100%;overflow-y:auto;
+  padding:16px;background:#0b0f19;
+}
+.kz-view.active{display:block}
+.kz-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+  gap:14px;
+}
+.kz-tile{
+  background:linear-gradient(180deg,#111827 0%,#0f172a 100%);
+  border:1px solid #334155;border-radius:14px;
+  padding:12px;height:320px;display:flex;gap:12px;overflow:hidden;
+  box-shadow:0 6px 20px rgba(0,0,0,.25);
+}
+.kz-text{
+  flex:0 0 62%;min-width:0;overflow-y:auto;
+  padding-right:8px;border-right:1px solid #334155;
+}
+.kz-viz{
+  flex:0 0 38%;display:flex;align-items:center;
+  justify-content:center;overflow:hidden;
+}
+.kz-title{
+  color:#22c55e;font-weight:800;font-size:18px;margin-bottom:8px;
+  letter-spacing:.4px;position:sticky;top:0;background:#111827;
+  padding-bottom:6px;font-family:var(--mono);
+}
+.kz-wp{
+  font-size:13px;line-height:1.35;color:#e5e7eb;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  padding:1px 0;font-family:var(--mono);
+}
+.kz-wp .fir{color:#94a3b8;font-size:11px}
+.kz-text::-webkit-scrollbar{width:6px}
+.kz-text::-webkit-scrollbar-thumb{background:#475569;border-radius:10px}
+
+/* Vertical viz */
+.viz-v{display:flex;flex-direction:column;align-items:center;gap:8px}
+.viz-label{
+  max-width:100%;font-size:11px;color:#f8fafc;font-weight:700;
+  background:#1e293b;border:1px solid #475569;border-radius:999px;
+  padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-family:var(--mono);
+}
+.viz-vline{
+  width:4px;height:115px;background:#ef4444;border-radius:999px;
+  box-shadow:0 0 10px rgba(239,68,68,.55);
+}
+
+/* Horizontal viz */
+.viz-h{width:100%;text-align:center}
+.viz-hlabels{
+  display:flex;justify-content:space-between;gap:8px;margin-bottom:12px;
+}
+.viz-hlabels span{
+  max-width:48%;font-size:11px;color:#f8fafc;font-weight:700;
+  background:#1e293b;border:1px solid #475569;border-radius:999px;
+  padding:4px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-family:var(--mono);
+}
+.viz-hline{
+  height:4px;width:86%;background:#ef4444;border-radius:999px;
+  box-shadow:0 0 10px rgba(239,68,68,.55);margin:0 auto;
+}
+
+.kz-empty{
+  padding:40px;text-align:center;color:var(--muted);
+  font-family:var(--mono);font-size:13px;
+}
+
 </style>
 </head>
 <body>
@@ -257,6 +344,10 @@ textarea::placeholder{color:var(--muted);opacity:.7}
 
   <section class="map-wrap">
     <div id="map"></div>
+    <div class="kz-view" id="kz-view">
+      <div class="kz-empty" id="kz-empty">Paste a KZ NOTAM and click Analyze.</div>
+      <div class="kz-grid" id="kz-grid"></div>
+    </div>
     <div class="legend">
       <div class="leg-item"><div class="leg-dot" style="background:#1a7a4a"></div> Named waypoint</div>
       <div class="leg-item"><div class="leg-dot" style="background:#e040fb"></div> Resolved coord</div>
@@ -341,8 +432,17 @@ async function analyzeNotam() {
     });
     if (!resp.ok) { const e=await resp.json().catch(()=>({})); throw new Error(e.error||`Server ${resp.status}`); }
     const data = await resp.json();
-    renderResults(data);
-    setStatus(`${data.total_segments} segment(s) plotted — click a card to zoom`, 'ok');
+    // 🧠 Auto-switch view based on backend detection
+    if (data.view_mode === 'kz') {
+      switchToKzView();
+      renderKzResults(data);
+      setStatus(`KZ NOTAM · ${data.total_airways} airway(s) found`, 'ok');
+    } else {
+      switchToChinaView();
+      renderResults(data);
+      setStatus(`${data.total_segments} segment(s) plotted — click a card to zoom`, 'ok');
+    }
+
   } catch(e) {
     setStatus('Error — '+e.message, 'idle');
     showToast('Error: '+e.message);
@@ -789,6 +889,10 @@ function clearAll() {
   document.getElementById('seg-count').textContent='';
   document.getElementById('copy-all-section').style.display='none';
   document.getElementById('copy-all-text').textContent='';
+  const kzGrid = document.getElementById('kz-grid');
+  if (kzGrid) kzGrid.innerHTML = '';
+  const kzEmpty = document.getElementById('kz-empty');
+  if (kzEmpty) { kzEmpty.style.display = 'block'; kzEmpty.textContent = 'Paste a KZ NOTAM and click Analyze.'; }
   setStatus('Ready','idle');
 }
 function haversineNM(lat1,lon1,lat2,lon2) {
@@ -845,6 +949,107 @@ document.addEventListener('mouseup', () => {
     if (map) map.invalidateSize();
   }, 50);
 });
+
+// ── View switching (auto-detect KZ vs China) ─────────────────────────────
+function switchToKzView() {
+  document.getElementById('map').style.display = 'none';
+  document.getElementById('kz-view').classList.add('active');
+  const legend = document.querySelector('.legend');
+  if (legend) legend.style.display = 'none';
+}
+
+function switchToChinaView() {
+  document.getElementById('map').style.display = 'block';
+  document.getElementById('kz-view').classList.remove('active');
+  const legend = document.querySelector('.legend');
+  if (legend) legend.style.display = 'block';
+  if (map) setTimeout(() => map.invalidateSize(), 50);
+}
+
+// ── Render KZ tile results ───────────────────────────────────────────────
+function renderKzResults(data) {
+  document.getElementById('meta-section').style.display = 'block';
+  document.getElementById('meta-id').textContent = data.notam_id || '—';
+
+  const grid  = document.getElementById('kz-grid');
+  const empty = document.getElementById('kz-empty');
+  const segList = document.getElementById('seg-list');
+  grid.innerHTML = '';
+
+  document.getElementById('seg-count').textContent =
+    data.total_airways ? `(${data.total_airways})` : '';
+
+  if (!data.tiles || !data.tiles.length) {
+    empty.style.display = 'block';
+    empty.textContent = 'No airways detected in this NOTAM.';
+    segList.innerHTML = '<div class="empty"><div class="empty-icon">⚠</div>No airways found.</div>';
+    document.getElementById('copy-all-section').style.display = 'none';
+    return;
+  }
+
+  empty.style.display = 'none';
+
+  // Sidebar: airway list (one card per airway)
+  segList.innerHTML = '';
+  data.tiles.forEach(t => {
+    const card = document.createElement('div');
+    card.className = 'seg-card';
+    card.innerHTML = `
+      <div class="seg-route">${esc(t.airway)}</div>
+      <div class="seg-dist">${t.count} waypoints</div>
+    `;
+    segList.appendChild(card);
+  });
+
+  // Copy-all for DS Portal
+  const copyLines = data.tiles.map(t => {
+    const wps = t.waypoints.map(w => w.name).join(', ');
+    return `${t.airway}: ${wps}`;
+  });
+  document.getElementById('copy-all-section').style.display = 'block';
+  document.getElementById('copy-all-text').textContent = copyLines.join('\n');
+
+  // Main tile grid
+  data.tiles.forEach(t => {
+    const tile = document.createElement('div');
+    tile.className = 'kz-tile';
+
+    const wpHtml = t.waypoints.map(w =>
+      `<div class="kz-wp">${esc(w.name)} <span class="fir">(${esc(w.fir||'-')})</span></div>`
+    ).join('');
+
+    let vizHtml = '<div style="color:#94a3b8;font-size:11px">—</div>';
+    if (t.extremes) {
+      const ex = t.extremes;
+      if (ex.orientation === 'vertical') {
+        vizHtml = `
+          <div class="viz-v">
+            <div class="viz-label">${esc(ex.north)}</div>
+            <div class="viz-vline"></div>
+            <div class="viz-label">${esc(ex.south)}</div>
+          </div>`;
+      } else {
+        vizHtml = `
+          <div class="viz-h">
+            <div class="viz-hlabels">
+              <span>${esc(ex.west)}</span>
+              <span>${esc(ex.east)}</span>
+            </div>
+            <div class="viz-hline"></div>
+          </div>`;
+      }
+    }
+
+    tile.innerHTML = `
+      <div class="kz-text">
+        <div class="kz-title">${esc(t.airway)}</div>
+        ${wpHtml}
+      </div>
+      <div class="kz-viz">${vizHtml}</div>
+    `;
+    grid.appendChild(tile);
+  });
+}
 
 window.addEventListener('DOMContentLoaded', () => {
   initMap(); checkHealth(); setInterval(checkHealth, 30000);

@@ -550,9 +550,9 @@ def _pick_waypoint_index(name: str, route: str = "", fir_hint: str = ""):
             # if FIR hint exists, refine further
             if fir_u:
                 fir_matches = [
-                    idx for idx in route_matches
-                    if WPT_META[idx].get("fir", "").strip().upper().startswith(fir_u[:2])
-                ]
+                     idx for idx in route_matches
+                     if _same_fir_family(WPT_META[idx].get("fir", ""), fir_u)
+                     ]
                 if fir_matches:
                     return fir_matches[0]
             return route_matches[0]
@@ -561,7 +561,7 @@ def _pick_waypoint_index(name: str, route: str = "", fir_hint: str = ""):
     if fir_u:
         fir_matches = [
             idx for idx in idxs
-            if WPT_META[idx].get("fir", "").strip().upper().startswith(fir_u[:2])
+            if _same_fir_family(WPT_META[idx].get("fir", ""), fir_u)
         ]
         if fir_matches:
             return fir_matches[0]
@@ -602,37 +602,39 @@ def _nearest_waypoint_on_route(route: str, lat: float, lon: float, exclude_name:
             }
 
     return best
+
 def _get_airway_blocks_in_fir(route: str, fir_hint: str):
     """
     Return contiguous waypoint blocks for a given airway inside the NOTAM FIR.
 
-    Example:
-        W189 has FIR sequence:
-        UE UE UE UE UE UE ZW ZW ZW ZW SE
-
-        For fir_hint='ZW', return one block:
-        AKLAS -> DAKPA
-
-    Returns:
-        list of tuples: [(start_meta, end_meta), ...]
+    Important:
+    - Keep normal strict FIR-prefix behavior for non-KZ NOTAMs (China etc.)
+    - Only use US-family matching for KZ-family NOTAMs
+      so KZ / K1-K7 / TJ can stay in the same closure block.
     """
     route_u = (route or "").strip().upper()
-    fir_u = (fir_hint or "").strip().upper()[:2]
+    fir_hint_u = (fir_hint or "").strip().upper()
 
     idxs = WPT_BY_AIRWAY.get(route_u, [])
-    if not idxs or not fir_u:
+    if not idxs or not fir_hint_u:
         return []
 
-    # positions on this airway that belong to the target FIR
-    matching_positions = [
-        pos for pos, idx in enumerate(idxs)
-        if WPT_META[idx].get("fir", "").strip().upper().startswith(fir_u)
-    ]
+    # KZ-family NOTAMs only -> use family logic
+    if fir_hint_u.startswith("KZ"):
+        matching_positions = [
+            pos for pos, idx in enumerate(idxs)
+            if _same_fir_family(WPT_META[idx].get("fir", ""), fir_hint_u)
+        ]
+    else:
+        # keep old strict behavior for China / others
+        matching_positions = [
+            pos for pos, idx in enumerate(idxs)
+            if _same_fir_family(WPT_META[idx].get("fir", ""), fir_hint_u)
+        ]
 
     if not matching_positions:
         return []
 
-    # split into contiguous position blocks
     blocks = []
     block_start = matching_positions[0]
     block_end = matching_positions[0]
@@ -647,7 +649,6 @@ def _get_airway_blocks_in_fir(route: str, fir_hint: str):
             block_start = pos
             block_end = pos
 
-    # add final block
     start_idx = idxs[block_start]
     end_idx = idxs[block_end]
     blocks.append((WPT_META[start_idx], WPT_META[end_idx]))
@@ -721,27 +722,27 @@ def _first_waypoint_in_direction_on_airway(route: str, anchor_name: str, bearing
 
     return first_meta, first_lat, first_lon, dist_nm
 
-def _locate_dist_dir_leg_on_airway(route: str, anchor_name: str, target_dist_nm: float, bearing_deg: float):
+def _locate_dist_dir_leg_on_airway(
+    route: str,
+    anchor_name: str,
+    target_dist_nm: float,
+    bearing_deg: float,
+    toward_name: str = "",
+):
     """
     Locate which airway leg contains the geometric dist_dir point.
 
-    Returns a dict like:
-    {
-        "anchor_pos": int,
-        "step": -1 or 1,
-        "from_pos": int,
-        "to_pos": int,
-        "from_meta": {...},
-        "to_meta": {...},
-        "distance_before_leg_nm": float,
-        "leg_distance_nm": float,
-    }
+    If toward_name is provided, force the airway walk from anchor_name
+    toward that fixed endpoint. This fixes cases like:
 
-    Meaning the dist_dir point lies somewhere on the leg:
-        from_meta <-> to_meta
+        Y1 : 90KM SOUTH OF SADAN - MAGOD
+
+    where bearing-only logic incorrectly walks from SADAN to UDN instead
+    of walking from SADAN toward MAGOD.
     """
     route_u = (route or "").strip().upper()
     anchor_u = (anchor_name or "").strip().upper()
+    toward_u = (toward_name or "").strip().upper()
 
     idxs = WPT_BY_AIRWAY.get(route_u, [])
     if not idxs:
@@ -751,6 +752,7 @@ def _locate_dist_dir_leg_on_airway(route: str, anchor_name: str, target_dist_nm:
         pos for pos, idx in enumerate(idxs)
         if WPT_META[idx]["name"].strip().upper() == anchor_u
     ]
+
     if not anchor_positions:
         return None
 
@@ -760,25 +762,63 @@ def _locate_dist_dir_leg_on_airway(route: str, anchor_name: str, target_dist_nm:
     best_choice = None
     best_score = None
 
-    # choose anchor occurrence + walking direction using first adjacent leg bearing
-    for anchor_pos in anchor_positions:
-        for step in (-1, 1):
-            next_pos = anchor_pos + step
-            if not (0 <= next_pos < len(idxs)):
-                continue
+    # ---------------------------------------------------------
+    # PRIORITY 1:
+    # If fixed endpoint exists on same route, walk toward it.
+    # This prevents Y1 SADAN-MAGOD from walking toward UDN.
+    # ---------------------------------------------------------
+    if toward_u:
+        target_positions = [
+            pos for pos, idx in enumerate(idxs)
+            if WPT_META[idx]["name"].strip().upper() == toward_u
+        ]
 
+        if target_positions:
+            for anchor_pos in anchor_positions:
+                for target_pos in target_positions:
+                    if target_pos == anchor_pos:
+                        continue
+
+                    step = 1 if target_pos > anchor_pos else -1
+                    next_pos = anchor_pos + step
+
+                    if not (0 <= next_pos < len(idxs)):
+                        continue
+
+                    # Pick closest fixed endpoint occurrence in route order.
+                    route_gap = abs(target_pos - anchor_pos)
+
+                    if best_score is None or route_gap < best_score:
+                        best_score = route_gap
+                        best_choice = (anchor_pos, step)
+
+    # ---------------------------------------------------------
+    # PRIORITY 2:
+    # Fallback old behavior: choose direction by bearing.
+    # Used when no fixed endpoint exists, e.g. dist_dir -> dist_dir.
+    # ---------------------------------------------------------
+    if best_choice is None:
+        best_score = None
+
+        for anchor_pos in anchor_positions:
             anchor_idx = idxs[anchor_pos]
-            next_idx = idxs[next_pos]
+            anchor_lat, anchor_lon = WPT_COORDS[anchor_idx]
 
-            a_lat, a_lon = WPT_COORDS[anchor_idx]
-            n_lat, n_lon = WPT_COORDS[next_idx]
+            for step in (-1, 1):
+                next_pos = anchor_pos + step
 
-            brg = _bearing(a_lat, a_lon, n_lat, n_lon)
-            score = ang_diff(brg, bearing_deg)
+                if not (0 <= next_pos < len(idxs)):
+                    continue
 
-            if best_score is None or score < best_score:
-                best_score = score
-                best_choice = (anchor_pos, step)
+                next_idx = idxs[next_pos]
+                next_lat, next_lon = WPT_COORDS[next_idx]
+
+                brg = _bearing(anchor_lat, anchor_lon, next_lat, next_lon)
+                score = ang_diff(brg, bearing_deg)
+
+                if best_score is None or score < best_score:
+                    best_score = score
+                    best_choice = (anchor_pos, step)
 
     if best_choice is None:
         return None
@@ -797,9 +837,9 @@ def _locate_dist_dir_leg_on_airway(route: str, anchor_name: str, target_dist_nm:
     while 0 <= pos < len(idxs):
         idx = idxs[pos]
         wlat, wlon = WPT_COORDS[idx]
+
         leg_dist = _dist_nm(prev_lat, prev_lon, wlat, wlon)
 
-        # dist_dir point lies on this leg
         if total_dist <= target_dist_nm <= total_dist + leg_dist:
             return {
                 "anchor_pos": anchor_pos,
@@ -818,10 +858,11 @@ def _locate_dist_dir_leg_on_airway(route: str, anchor_name: str, target_dist_nm:
         prev_lat, prev_lon = wlat, wlon
         pos += step
 
-    # If the target goes beyond the route end, use the last reachable leg
+    # If the target goes beyond the route end, use the last reachable branch.
     if prev_pos != anchor_pos:
         edge_from = min(anchor_pos, prev_pos)
         edge_to = max(anchor_pos, prev_pos)
+
         return {
             "anchor_pos": anchor_pos,
             "step": step,
@@ -853,12 +894,20 @@ def _resolve_dist_dir_against_waypoint_on_route(
     - Otherwise snap to the far-side endpoint of the containing leg.
     - If the boundary lands exactly on a waypoint, use that exact waypoint.
     """
+    print(
+    f"[DEBUG] route={route} "
+    f"anchor={anchor_name} "
+    f"fixed={fixed_name}")
+    print(
+    f"[DEBUG] anchor_pos={_route_positions(route, anchor_name)} "
+    f"fixed_pos={_route_positions(route, fixed_name)}")
 
     leg = _locate_dist_dir_leg_on_airway(
         route=route,
         anchor_name=anchor_name,
         target_dist_nm=target_dist_nm,
         bearing_deg=bearing_deg,
+        toward_name=fixed_name,
     )
     if not leg:
         return None
@@ -989,6 +1038,104 @@ def _pick_position_toward_other(route: str, candidate_positions: list[int], othe
 
     return best_pos
 
+def _build_kz_directional_route_closure(route: str, fix_name: str, dir_text: str, fir_hint: str):
+    route_u = (route or "").strip().upper()
+    fix_u = (fix_name or "").strip().upper()
+    dir_u = (dir_text or "").strip().upper()
+
+    idxs = WPT_BY_AIRWAY.get(route_u, [])
+    if not idxs:
+        return None
+
+    target_bearing = DIR_BEARING.get(dir_u)
+    if target_bearing is None:
+        return None
+
+    fix_positions = [
+        pos for pos, idx in enumerate(idxs)
+        if WPT_META[idx]["name"].strip().upper() == fix_u
+    ]
+    if not fix_positions:
+        return None
+
+    def ang_diff(a, b):
+        return abs(((a - b) + 180) % 360 - 180)
+
+    best_choice = None
+    best_score = None
+
+    for fix_pos in fix_positions:
+        fix_idx = idxs[fix_pos]
+        fix_lat, fix_lon = WPT_COORDS[fix_idx]
+
+        for step in (-1, 1):
+            next_pos = fix_pos + step
+            if not (0 <= next_pos < len(idxs)):
+                continue
+
+            next_idx = idxs[next_pos]
+            next_lat, next_lon = WPT_COORDS[next_idx]
+
+            brg = _bearing(fix_lat, fix_lon, next_lat, next_lon)
+            score = ang_diff(brg, target_bearing)
+
+            if best_score is None or score < best_score:
+                best_score = score
+                best_choice = (fix_pos, step)
+
+    if best_choice is None:
+        return None
+
+    fix_pos, step = best_choice
+
+    start_pos = fix_pos
+    end_pos = fix_pos
+
+    notam_family = _fir_family(fir_hint)
+
+    pos = fix_pos + step
+    used_bridge_once = False
+
+    while 0 <= pos < len(idxs):
+        meta = WPT_META[idxs[pos]]
+        meta_fir = meta.get("fir", "").strip().upper()
+
+        # Different family -> stop
+        if _fir_family(meta_fir) != notam_family:
+            break
+
+        end_pos = pos
+
+        # Important: allow ONE transition into K6/K7/TJ then STOP
+        if (
+            notam_family == "US_FAMILY"
+            and not meta_fir.startswith("KZ")
+            and _is_us_bridge_code(meta_fir)
+        ):
+            used_bridge_once = True
+            break
+
+        pos += step
+
+    if end_pos == fix_pos:
+        next_pos = fix_pos + step
+        if 0 <= next_pos < len(idxs):
+            end_pos = next_pos
+
+    left_pos = min(start_pos, end_pos)
+    right_pos = max(start_pos, end_pos)
+
+    left_meta = WPT_META[idxs[left_pos]]
+    right_meta = WPT_META[idxs[right_pos]]
+
+    return {
+        "route": route_u,
+        "raw": f"{route_u} CLSD {dir_u} OF {fix_u}",
+        "point_a": {"type": "waypoint", "name": left_meta["name"]},
+        "point_b": {"type": "waypoint", "name": right_meta["name"]},
+        "kz_style": "directional_built",
+        "used_bridge_once": used_bridge_once,
+    }
 
 def resolve_dist_dir_point(route, point, other_point=None, fir_hint=""):
     """
@@ -1050,7 +1197,7 @@ def resolve_dist_dir_point(route, point, other_point=None, fir_hint=""):
 
             if snapped:
                 log.info(
-                    "✅ MODE1 SNAP: raw=%s route=%s anchor=%s fixed=%s target=%.2fNM -> snapped=%s (%s)",
+                    "MODE1 SNAP: raw=%s route=%s anchor=%s fixed=%s target=%.2fNM -> snapped=%s (%s)",
                     point.get("raw"),
                     route,
                     fix_name,
@@ -1079,7 +1226,7 @@ def resolve_dist_dir_point(route, point, other_point=None, fir_hint=""):
                     }
 
                     log.info(
-                        "✅ ROUTE LEG SNAP (fallback): raw=%s route=%s anchor=%s fixed=%s target=%.2fNM first=%s first_dist=%.2fNM -> snapped=%s",
+                        "ROUTE LEG SNAP (fallback): raw=%s route=%s anchor=%s fixed=%s target=%.2fNM first=%s first_dist=%.2fNM -> snapped=%s",
                         point.get("raw"),
                         route,
                         fix_name,
@@ -1173,7 +1320,6 @@ DIST_DIR_RE = re.compile(
 )
 
 
-
 _DIST_DIR_TOKEN = (
     r'(?:'
     r'\d+(?:\.\d+)?\s*(?:KM|NM|NAUTICAL\s+MILES?)'
@@ -1186,7 +1332,6 @@ _DIST_DIR_TOKEN = (
     r')'
     r')'
 )
-
 
 _COORD_TOKEN = (
     r'(?:'
@@ -1235,6 +1380,23 @@ ROUTE_ONLY_RE = re.compile(
 
 STANDALONE_COORD_RE = re.compile(_COORD_TOKEN, re.IGNORECASE)
 
+# ── KZ-specific closure patterns ──────────────────────────────────────────────
+KZ_BTN_RE = re.compile(
+    r'\b([A-Z0-9/]+)\s*CLSD\s*BTN\s+([A-Z0-9]{2,10})\s+AND\s+([A-Z0-9]{2,10})\b',
+    re.IGNORECASE
+)
+
+KZ_DIR_RE = re.compile(
+    r'\b([A-Z0-9/]+)\s*CLSD\s+'
+    r'(NORTHWEST|NORTHEAST|SOUTHWEST|SOUTHEAST|NORTH|SOUTH|EAST|WEST|NW|NE|SW|SE|N|S|E|W)'
+    r'\s+OF\s+([A-Z0-9]{2,10})\b',
+    re.IGNORECASE
+)
+
+KZ_ROUTE_ONLY_CLSD_RE = re.compile(
+    r'\b([A-Z0-9/]+)\s*CLSD\b',
+    re.IGNORECASE
+)
 
 def sanitize_text(text: str) -> str:
     text = re.sub(r'[^\x20-\x7E\n\r\t]', '', text)
@@ -1275,6 +1437,63 @@ def normalize_notam_text_for_parsing(text: str) -> str:
     )
 
     return text
+
+def _split_route_group(route_text: str) -> list[str]:
+    """
+    Example:
+        Y185/Y585 -> ["Y185", "Y585"]
+        L375/L435 -> ["L375", "L435"]
+    """
+    if not route_text:
+        return []
+    return [r.strip().upper() for r in route_text.split("/") if r.strip()]
+
+
+def _is_kz_notam(notam_text: str) -> bool:
+    """
+    Detect KZ-family NOTAMs like KZMA / KZWY / KZHU / KZNY.
+    This is additive only and does not affect China logic.
+    """
+    a_fir_m = re.search(r'A\)\s*([A-Z]{4})', notam_text)
+    q_fir_m = re.search(r'Q\)\s*([A-Z]{4})', notam_text)
+
+    fir = ""
+    if a_fir_m:
+        fir = a_fir_m.group(1).upper()
+    elif q_fir_m:
+        fir = q_fir_m.group(1).upper()
+
+    return fir.startswith("KZ")
+
+
+def _fir_family(code: str) -> str:
+    """
+    Group FIR-like codes into logical families.
+
+    US family:
+      KZ, K1-K7, TJ
+    """
+    c = (code or "").strip().upper()
+
+    if c.startswith("KZ"):
+        return "US_FAMILY"
+
+    if re.match(r"^K[1-7]$", c):
+        return "US_FAMILY"
+
+    if c.startswith("TJ"):
+        return "US_FAMILY"
+
+    return c[:2]
+
+
+def _same_fir_family(code: str, hint: str) -> bool:
+    return _fir_family(code) == _fir_family(hint)
+
+
+def _is_us_bridge_code(code: str) -> bool:
+    c = (code or "").strip().upper()
+    return bool(re.match(r"^K[1-7]$", c) or c.startswith("TJ"))
 
 def _make_point(token: str) -> dict:
     token = re.sub(r'\s+', ' ', token.strip().upper())
@@ -1389,17 +1608,27 @@ def extract_segments(notam_text: str) -> list[dict]:
 
         add_seg(route, raw_a, raw_b, m.group(0))
 
-    if not segments:
+    # Generic UNK fallback is useful for some old/non-KZ NOTAMs,
+    # but for KZ NOTAMs it creates fake segments from the Q-line
+    # such as: UNK 3130N05608W999 -> KZWY
+    if not segments and not _is_kz_notam(notam_text):
         for line in notam_text.splitlines():
             line_up = line.strip().upper()
+
+            # skip NOTAM header/meta lines
+            if re.match(r'^[QABCDFG]\)', line_up):
+                continue
+
             coords = STANDALONE_COORD_RE.findall(line_up)
             wpts = [
                 w for w in re.findall(r'\b([A-Z]{3,6})\b', line_up)
                 if w not in {
                     "NOTAM", "CLSD", "FROM", "WITHIN", "SEGMENT", "ATS",
-                    "RTE", "BTN", "AND", "FLW", "INCL", "INCLUSIVE", "BELOW", "ABOVE"
+                    "RTE", "BTN", "AND", "FLW", "INCL", "INCLUSIVE", "BELOW", "ABOVE",
+                    "NEXT", "FIX", "RERTE", "TFC", "NB", "SB"
                 }
             ]
+
             if coords and wpts:
                 add_seg("UNK", coords[0], wpts[0], line)
             elif len(coords) >= 2:
@@ -1460,6 +1689,118 @@ def extract_route_only_segments(notam_text: str, fir_hint: str) -> list[dict]:
 
     return segments
 
+def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
+    """
+    Extra parser for KZ-style NOTAMs only.
+    Keeps China extraction untouched.
+
+    Handles:
+      - AR3 CLSD BTN ZQA AND CARPX
+      - L375/L435 CLSD BTN JAINS AND FLUPS
+      - M202CLSD BTN UKOKA AND OMALA
+      - Y185/Y585 CLSD NW OF RENAH
+      - Q89 CLSD S OF PRMUS
+      - AR6/AR15 CLSD
+      - AR12/Y436 CLSD
+    """
+    segments = []
+    seen = set()
+
+    lines = [
+        re.sub(r'\s+', ' ', line.strip().upper())
+        for line in notam_text.splitlines()
+        if line.strip()
+    ]
+
+    # 1) BTN closures
+    # Examples:
+    #   AR3 CLSD BTN ZQA AND CARPX
+    #   L375/L435 CLSD BTN JAINS AND FLUPS
+    #   M202CLSD BTN UKOKA AND OMALA
+    for line in lines:
+        for m in KZ_BTN_RE.finditer(line):
+            route_group = m.group(1).strip().upper()
+            pt_a = m.group(2).strip().upper()
+            pt_b = m.group(3).strip().upper()
+
+            for route in _split_route_group(route_group):
+                key = ("BTN", route, pt_a, pt_b)
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                segments.append({
+                    "route": route,
+                    "raw": m.group(0),
+                    "point_a": {"type": "waypoint", "name": pt_a},
+                    "point_b": {"type": "waypoint", "name": pt_b},
+                    "kz_style": "btn",
+                })
+                print("BTN MATCH:", m.group(0))
+    # 2) Directional closures
+    # Examples:
+    #   Y185/Y585 CLSD NW OF RENAH
+    #   Q89 CLSD S OF PRMUS
+    #   Y494 CLSD SW OF VIRST
+    for line in lines:
+        for m in KZ_DIR_RE.finditer(line):
+            route_group = m.group(1).strip().upper()
+            dir_txt = m.group(2).strip().upper()
+            fix_name = m.group(3).strip().upper()
+
+            for route in _split_route_group(route_group):
+                key = ("DIR", route, dir_txt, fix_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                segments.append({
+                    "route": route,
+                    "raw": m.group(0),
+                    "point_a": {"type": "waypoint", "name": fix_name},
+                    "point_b": {"type": "waypoint", "name": fix_name},
+                    "directional_closure": True,
+                    "direction": dir_txt,
+                    "anchor_fix": fix_name,
+                    "kz_style": "directional",
+                })
+
+    # 3) Full-route closures like:
+    #   AR6/AR15 CLSD.
+    #   AR12/Y436 CLSD.
+    #   L451 CLSD.
+    #
+    # Skip lines already handled as BTN or directional.
+    for line in lines:
+        if " BTN " in line:
+            continue
+        if re.search(r'\b(NW|NE|SW|SE|NORTH|SOUTH|EAST|WEST|N|S|E|W)\s+OF\b', line):
+            continue
+
+        for m in KZ_ROUTE_ONLY_CLSD_RE.finditer(line):
+            route_group = m.group(1).strip().upper()
+
+            for route in _split_route_group(route_group):
+                blocks = _get_airway_blocks_in_fir(route, fir_hint)
+
+                for start_meta, end_meta in blocks:
+                    key = ("FULL", route, start_meta["name"], end_meta["name"])
+                    if key in seen:
+                        continue
+                    seen.add(key)
+
+                    segments.append({
+                        "route": route,
+                        "raw": m.group(0),
+                        "point_a": {"type": "waypoint", "name": start_meta["name"].strip().upper()},
+                        "point_b": {"type": "waypoint", "name": end_meta["name"].strip().upper()},
+                        "route_only_block": True,
+                        "kz_style": "full_route",
+                    })
+                    print("KZ line:", line)
+    return segments
+
+
 # ── Security headers ──────────────────────────────────────────────────────────
 @app.after_request
 def security_headers(response):
@@ -1496,6 +1837,60 @@ def health():
         "airways_loaded": len(WPT_BY_AIRWAY),
     }), 200 if healthy else 503
 
+def _build_kz_response(notam_text: str):
+    """KZ tile view - airway summary, no map."""
+    notam_id = (re.search(r'[A-Z]\d{4}/\d{2}', notam_text) or
+                type('', (), {'group': lambda *a: 'UNKNOWN'})()).group(0)
+    valid_b = re.search(r'B\)(\d{10})', notam_text)
+    valid_c = re.search(r'C\)(\d{10})', notam_text)
+
+    normalized = re.sub(r"[^A-Z0-9/ ]", " ", notam_text.upper())
+    tokens = re.split(r"[ /]+", normalized)
+    airways_found = sorted({t for t in tokens if t and t in WPT_BY_AIRWAY})
+
+    tiles = []
+    for awy in airways_found:
+        idxs = WPT_BY_AIRWAY.get(awy, [])
+        if not idxs:
+            continue
+        waypoints = [{
+            "name": WPT_META[i]["name"],
+            "fir":  WPT_META[i].get("fir", ""),
+            "lat":  WPT_META[i]["lat"],
+            "lon":  WPT_META[i]["lon"],
+        } for i in idxs]
+
+        extremes = None
+        if len(waypoints) >= 2:
+            north = max(waypoints, key=lambda w: w["lat"])
+            south = min(waypoints, key=lambda w: w["lat"])
+            east  = max(waypoints, key=lambda w: w["lon"])
+            west  = min(waypoints, key=lambda w: w["lon"])
+            dlat = abs(north["lat"] - south["lat"])
+            dlon = abs(east["lon"]  - west["lon"])
+            extremes = {
+                "orientation": "vertical" if dlat >= dlon else "horizontal",
+                "north": north["name"], "south": south["name"],
+                "east":  east["name"],  "west":  west["name"],
+            }
+
+        tiles.append({
+            "airway": awy,
+            "waypoints": waypoints,
+            "count": len(waypoints),
+            "extremes": extremes,
+        })
+
+    return jsonify({
+        "view_mode": "kz",
+        "notam_id": notam_id,
+        "valid_from": valid_b.group(1) if valid_b else None,
+        "valid_to":   valid_c.group(1) if valid_c else None,
+        "airways_found": airways_found,
+        "total_airways": len(airways_found),
+        "tiles": tiles,
+    })
+
 @app.route("/api/analyze", methods=["POST"])
 @rate_limit
 def analyze():
@@ -1509,6 +1904,9 @@ def analyze():
 
     notam_text = sanitize_text(raw_notam)
     notam_text = normalize_notam_text_for_parsing(notam_text)
+    # 🧠 Auto-detect: KZ NOTAM → tile view, otherwise China map view
+    if _is_kz_notam(notam_text):
+        return _build_kz_response(notam_text)
     notam_id   = (re.search(r'[A-Z]\d{4}/\d{2}', notam_text) or type('', (), {'group': lambda *a: 'UNKNOWN'})()).group(0)
     a_fir_m = re.search(r'A\)\s*([A-Z]{4})', notam_text)
     q_fir_m = re.search(r'Q\)\s*([A-Z]{4})', notam_text)
@@ -1523,12 +1921,37 @@ def analyze():
     valid_b    = re.search(r'B\)(\d{10})', notam_text)
     valid_c    = re.search(r'C\)(\d{10})', notam_text)
 
-
     segments = extract_segments(notam_text)
-    
-    # add route-only airway closures like "W189." or "V116."
+
+    # existing generic route-only logic (keep unchanged)
     route_only_segments = extract_route_only_segments(notam_text, notam_fir_hint)
     segments.extend(route_only_segments)
+
+    # KZ-only extra parsing (additive; does not affect China logic)
+    if _is_kz_notam(notam_text):
+        kz_segments = extract_kz_segments(notam_text, notam_fir_hint)
+        segments.extend(kz_segments)
+        print("KZ SEGMENTS EXTRACTED:", len(kz_segments))
+        for s in kz_segments:
+            print("KZ SEG:", s.get("route"), s.get("point_a"), s.get("point_b"), s.get("kz_style"))
+
+        expanded_segments = []
+        for seg in segments:
+            if seg.get("directional_closure"):
+                built = _build_kz_directional_route_closure(
+                    route=seg.get("route", ""),
+                    fix_name=seg.get("anchor_fix", ""),
+                    dir_text=seg.get("direction", ""),
+                    fir_hint=notam_fir_hint,
+                )
+                if built:
+                    expanded_segments.append(built)
+                else:
+                    expanded_segments.append(seg)
+            else:
+                expanded_segments.append(seg)
+
+        segments = expanded_segments
 
     for seg in segments:
         route = seg.get("route", "")
@@ -1902,6 +2325,7 @@ def analyze():
 
 
     result = {
+        "view_mode":      "china",
         "notam_id":       notam_id,
         "fl_range":       fl_range,
         "valid_from":     valid_b.group(1) if valid_b else None,

@@ -194,6 +194,22 @@ textarea::placeholder{color:var(--muted);opacity:.7}
   background:rgba(0,229,255,.4);
 }
 
+#notam-dragbar{
+  height:6px;
+  cursor:row-resize;
+  background:transparent;
+  border-bottom:1px solid var(--border);
+  flex-shrink:0;
+  transition:background .15s;
+}
+#notam-dragbar:hover{
+  background:rgba(0,229,255,.4);
+}
+/* allow textarea to be resized programmatically */
+#notam-input{
+  height:160px;
+}
+
 /* Mode toggle */
 .mode-toggle{
   display:flex;gap:6px;padding:10px 16px;
@@ -244,6 +260,17 @@ textarea::placeholder{color:var(--muted);opacity:.7}
   padding:1px 0;font-family:var(--mono);
 }
 .kz-wp .fir{color:#94a3b8;font-size:11px}
+
+/* Airways Found list */
+.airway-list{
+  max-height:170px;overflow-y:auto;
+  background:var(--navy3);border:1px solid var(--border);
+  border-radius:8px;padding:8px;
+  font-family:var(--mono);font-size:12px;line-height:1.6;
+}
+.airway-list .aw{color:#d1fae5;padding:1px 0}
+.airway-list::-webkit-scrollbar{width:4px}
+.airway-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 .kz-text::-webkit-scrollbar{width:6px}
 .kz-text::-webkit-scrollbar-thumb{background:#475569;border-radius:10px}
 
@@ -313,6 +340,7 @@ textarea::placeholder{color:var(--muted);opacity:.7}
         <button class="btn btn-ghost" onclick="clearAll()">Clear</button>
       </div>
     </div>
+    <div id="notam-dragbar" title="Drag to resize input"></div>
 
 
     <div class="p-section" id="meta-section" style="display:none">
@@ -321,8 +349,13 @@ textarea::placeholder{color:var(--muted);opacity:.7}
         <div class="meta-chip"><div class="meta-chip-label">NOTAM ID</div><div class="meta-chip-val" id="meta-id">—</div></div>
       </div>
     </div>
-
-
+        <div class="p-section" id="kz-airways-section" style="display:none">
+      <div class="p-label kz-aw-header" onclick="toggleAirways()" style="cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none">
+        <span id="kz-aw-caret">▾</span>
+        Airways Found <span id="kz-airways-count" style="color:var(--teal)"></span>
+      </div>
+      <div class="airway-list" id="kz-airways-list"></div>
+    </div>
     <div class="p-section" style="border-bottom:none;padding-bottom:6px">
       <div class="p-label">Affected Segments <span id="seg-count" style="color:var(--teal)"></span></div>
     </div>
@@ -478,7 +511,8 @@ function renderResults(data) {
   activeSegmentIndex = null;
   document.getElementById('meta-section').style.display = 'block';
   document.getElementById('meta-id').textContent   = data.notam_id || '—';
-
+  const awSec = document.getElementById('kz-airways-section');
+  if (awSec) awSec.style.display = 'none';
 
   currentSegments = data.segments || [];
   document.getElementById('seg-count').textContent =
@@ -891,6 +925,8 @@ function clearAll() {
   document.getElementById('copy-all-text').textContent='';
   const kzGrid = document.getElementById('kz-grid');
   if (kzGrid) kzGrid.innerHTML = '';
+  const awSec2 = document.getElementById('kz-airways-section');
+  if (awSec2) awSec2.style.display = 'none';
   const kzEmpty = document.getElementById('kz-empty');
   if (kzEmpty) { kzEmpty.style.display = 'block'; kzEmpty.textContent = 'Paste a KZ NOTAM and click Analyze.'; }
   setStatus('Ready','idle');
@@ -950,6 +986,36 @@ document.addEventListener('mouseup', () => {
   }, 50);
 });
 
+// ── Vertical resize for NOTAM textarea ──────────────────────────────
+(function() {
+  const bar = document.getElementById('notam-dragbar');
+  const ta  = document.getElementById('notam-input');
+  if (!bar || !ta) return;
+
+  let dragging = false;
+
+  bar.addEventListener('mousedown', (e) => {
+    dragging = true;
+    document.body.style.cursor = 'row-resize';
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+    if (!dragging) return;
+    const top = ta.getBoundingClientRect().top;
+    let h = e.clientY - top;
+    if (h < 60)  h = 60;    // min height
+    if (h > 500) h = 500;   // max height
+    ta.style.height = h + 'px';
+  });
+
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return;
+    dragging = false;
+    document.body.style.cursor = 'default';
+  });
+})();
+
 // ── View switching (auto-detect KZ vs China) ─────────────────────────────
 function switchToKzView() {
   document.getElementById('map').style.display = 'none';
@@ -966,51 +1032,93 @@ function switchToChinaView() {
   if (map) setTimeout(() => map.invalidateSize(), 50);
 }
 
+function toggleAirways() {
+  const list  = document.getElementById('kz-airways-list');
+  const caret = document.getElementById('kz-aw-caret');
+  const collapsed = list.style.display === 'none';
+  list.style.display = collapsed ? 'block' : 'none';
+  caret.textContent  = collapsed ? '▾' : '▸';
+}
+
 // ── Render KZ tile results ───────────────────────────────────────────────
 function renderKzResults(data) {
   document.getElementById('meta-section').style.display = 'block';
   document.getElementById('meta-id').textContent = data.notam_id || '—';
 
-  const grid  = document.getElementById('kz-grid');
-  const empty = document.getElementById('kz-empty');
-  const segList = document.getElementById('seg-list');
-  grid.innerHTML = '';
+  const segments = data.segments || [];
+  const tiles = data.tiles || [];
+  currentSegments = segments;
 
-  document.getElementById('seg-count').textContent =
-    data.total_airways ? `(${data.total_airways})` : '';
+  // ❌ KZ: no Copy DS Portal box
+  document.getElementById('copy-all-section').style.display = 'none';
+  document.getElementById('copy-all-text').textContent = '';
 
-  if (!data.tiles || !data.tiles.length) {
-    empty.style.display = 'block';
-    empty.textContent = 'No airways detected in this NOTAM.';
-    segList.innerHTML = '<div class="empty"><div class="empty-icon">⚠</div>No airways found.</div>';
-    document.getElementById('copy-all-section').style.display = 'none';
-    return;
+  // ── 💙 Airways Found list ──
+  const awSection = document.getElementById('kz-airways-section');
+  const awList    = document.getElementById('kz-airways-list');
+  const awCount   = document.getElementById('kz-airways-count');
+  const airways   = tiles.map(t => t.airway);
+  if (airways.length) {
+    awSection.style.display = 'block';
+    awCount.textContent = `(${airways.length})`;
+    awList.innerHTML = airways.map(a => `<div class="aw">• ${esc(a)}</div>`).join('');
+  } else {
+    awSection.style.display = 'none';
+    awList.innerHTML = '';
   }
 
+  // ── Sidebar closure cards (China-style, exactly what NOTAM says) ──
+  const list = document.getElementById('seg-list');
+  document.getElementById('seg-count').textContent = segments.length ? `(${segments.length})` : '';
+  list.innerHTML = '';
+
+  if (!segments.length) {
+    list.innerHTML = '<div class="empty"><div class="empty-icon">⚠</div>No closures detected.</div>';
+  } else {
+    segments.forEach(seg => {
+      const ptA = seg.point_a || {};
+      const ptB = seg.point_b || {};
+      const nameA = ptA.display_name || ptA.name || ptA.raw || '?';
+      const nameB = ptB.display_name || ptB.name || ptB.raw || '?';
+      const firA = ptA.display_fir || '', firB = ptB.display_fir || '';
+      const firs = [...new Set([firA, firB].filter(Boolean))].join(' / ');
+
+      const warnings = [];
+      if (ptA.type === 'waypoint' && ptA.display_lat == null)
+        warnings.push(`Waypoint not found: ${ptA.name || ptA.raw}`);
+      if (ptB.type === 'waypoint' && ptB.display_lat == null)
+        warnings.push(`Waypoint not found: ${ptB.name || ptB.raw}`);
+
+      const card = document.createElement('div');
+      card.className = 'seg-card';
+      card.innerHTML = `
+        <div class="seg-route">${esc(seg.route)}</div>
+        <div class="seg-path">
+          <span class="seg-wpt ${ptWptClass(ptA)}">${esc(nameA)}</span>
+          <span class="seg-arrow">→</span>
+          <span class="seg-wpt ${ptWptClass(ptB)}">${esc(nameB)}</span>
+        </div>
+        <span class="seg-badge">CLOSED</span>
+        ${firs ? `<div class="seg-dist">FIR: ${esc(firs)}</div>` : ''}
+        ${warnings.length ? `<div class="seg-dist" style="color:#e24b4a;font-weight:600">⚠ ${warnings.map(esc).join('<br>')}</div>` : ''}
+      `;
+      list.appendChild(card);
+    });
+  }
+
+  // ── Right grid: airway visual tiles ──
+  const grid  = document.getElementById('kz-grid');
+  const empty = document.getElementById('kz-empty');
+  grid.innerHTML = '';
+
+  if (!tiles.length) {
+    empty.style.display = 'block';
+    empty.textContent = 'No airways detected in this NOTAM.';
+    return;
+  }
   empty.style.display = 'none';
 
-  // Sidebar: airway list (one card per airway)
-  segList.innerHTML = '';
-  data.tiles.forEach(t => {
-    const card = document.createElement('div');
-    card.className = 'seg-card';
-    card.innerHTML = `
-      <div class="seg-route">${esc(t.airway)}</div>
-      <div class="seg-dist">${t.count} waypoints</div>
-    `;
-    segList.appendChild(card);
-  });
-
-  // Copy-all for DS Portal
-  const copyLines = data.tiles.map(t => {
-    const wps = t.waypoints.map(w => w.name).join(', ');
-    return `${t.airway}: ${wps}`;
-  });
-  document.getElementById('copy-all-section').style.display = 'block';
-  document.getElementById('copy-all-text').textContent = copyLines.join('\n');
-
-  // Main tile grid
-  data.tiles.forEach(t => {
+  tiles.forEach(t => {
     const tile = document.createElement('div');
     tile.className = 'kz-tile';
 

@@ -1436,6 +1436,22 @@ def normalize_notam_text_for_parsing(text: str) -> str:
         flags=re.IGNORECASE
     )
 
+    # Case 1D: distance RANGE in one direction
+    # "100KM-180KM EAST OF PURPA"
+    # -> "100KM EAST OF PURPA-180KM EAST OF PURPA"
+    # so both endpoints become full dist_dir points on the same fix/route.
+    text = re.sub(
+        r'(\d+(?:\.\d+)?\s*(?:KM|NM))\s*-\s*'
+        r'(\d+(?:\.\d+)?\s*(?:KM|NM))\s+'
+        r'(NORTHEAST|NORTHWEST|SOUTHEAST|SOUTHWEST|NORTH|SOUTH|EAST|WEST|NE|NW|SE|SW|N|S|E|W)\s+'
+        r'OF\s+(.+?)'
+        r'(?=\s+OF\s+ATS\b|\s*[-–]|\s*\.|$)',
+        lambda m: f"{m.group(1)} {m.group(3)} OF {m.group(4).strip()}"
+                  f"-{m.group(2)} {m.group(3)} OF {m.group(4).strip()}",
+        text,
+        flags=re.IGNORECASE
+    )
+
     return text
 
 def _split_route_group(route_text: str) -> list[str]:
@@ -1837,13 +1853,8 @@ def health():
         "airways_loaded": len(WPT_BY_AIRWAY),
     }), 200 if healthy else 503
 
-def _build_kz_response(notam_text: str):
-    """KZ tile view - airway summary, no map."""
-    notam_id = (re.search(r'[A-Z]\d{4}/\d{2}', notam_text) or
-                type('', (), {'group': lambda *a: 'UNKNOWN'})()).group(0)
-    valid_b = re.search(r'B\)(\d{10})', notam_text)
-    valid_c = re.search(r'C\)(\d{10})', notam_text)
-
+def _build_kz_tiles(notam_text: str):
+    """Build airway visual tiles for KZ NOTAMs (right-side grid only)."""
     normalized = re.sub(r"[^A-Z0-9/ ]", " ", notam_text.upper())
     tokens = re.split(r"[ /]+", normalized)
     airways_found = sorted({t for t in tokens if t and t in WPT_BY_AIRWAY})
@@ -1858,14 +1869,19 @@ def _build_kz_response(notam_text: str):
             "fir":  WPT_META[i].get("fir", ""),
             "lat":  WPT_META[i]["lat"],
             "lon":  WPT_META[i]["lon"],
+            "us_family": _fir_family(WPT_META[i].get("fir", "")) == "US_FAMILY",
         } for i in idxs]
 
+        # 🔴 red-line visual uses ONLY K1-K7 / KZ / TJ (ignore CY etc.)
+        closed_wps = [w for w in waypoints if w["us_family"]]
+        viz_wps = closed_wps if len(closed_wps) >= 2 else waypoints
+
         extremes = None
-        if len(waypoints) >= 2:
-            north = max(waypoints, key=lambda w: w["lat"])
-            south = min(waypoints, key=lambda w: w["lat"])
-            east  = max(waypoints, key=lambda w: w["lon"])
-            west  = min(waypoints, key=lambda w: w["lon"])
+        if len(viz_wps) >= 2:
+            north = max(viz_wps, key=lambda w: w["lat"])
+            south = min(viz_wps, key=lambda w: w["lat"])
+            east  = max(viz_wps, key=lambda w: w["lon"])
+            west  = min(viz_wps, key=lambda w: w["lon"])
             dlat = abs(north["lat"] - south["lat"])
             dlon = abs(east["lon"]  - west["lon"])
             extremes = {
@@ -1880,16 +1896,7 @@ def _build_kz_response(notam_text: str):
             "count": len(waypoints),
             "extremes": extremes,
         })
-
-    return jsonify({
-        "view_mode": "kz",
-        "notam_id": notam_id,
-        "valid_from": valid_b.group(1) if valid_b else None,
-        "valid_to":   valid_c.group(1) if valid_c else None,
-        "airways_found": airways_found,
-        "total_airways": len(airways_found),
-        "tiles": tiles,
-    })
+    return tiles
 
 @app.route("/api/analyze", methods=["POST"])
 @rate_limit
@@ -1904,9 +1911,7 @@ def analyze():
 
     notam_text = sanitize_text(raw_notam)
     notam_text = normalize_notam_text_for_parsing(notam_text)
-    # 🧠 Auto-detect: KZ NOTAM → tile view, otherwise China map view
-    if _is_kz_notam(notam_text):
-        return _build_kz_response(notam_text)
+    
     notam_id   = (re.search(r'[A-Z]\d{4}/\d{2}', notam_text) or type('', (), {'group': lambda *a: 'UNKNOWN'})()).group(0)
     a_fir_m = re.search(r'A\)\s*([A-Z]{4})', notam_text)
     q_fir_m = re.search(r'Q\)\s*([A-Z]{4})', notam_text)
@@ -2324,15 +2329,21 @@ def analyze():
                 })
 
 
+    is_kz = _is_kz_notam(notam_text)
     result = {
-        "view_mode":      "china",
+        "view_mode":      "kz" if is_kz else "china",
         "notam_id":       notam_id,
         "fl_range":       fl_range,
         "valid_from":     valid_b.group(1) if valid_b else None,
         "valid_to":       valid_c.group(1) if valid_c else None,
         "segments":       segments,
         "total_segments": len(segments),
+        "tiles":          _build_kz_tiles(notam_text) if is_kz else [],
+        "total_airways":  0,
     }
+    if is_kz:
+        result["total_airways"] = len(result["tiles"])
+    
     log.info("Analyzed NOTAM %s — %d segments", notam_id, len(segments))
     return jsonify(result)
 

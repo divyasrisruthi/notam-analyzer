@@ -1172,13 +1172,21 @@ def resolve_dist_dir_point(route, point, other_point=None, fir_hint=""):
         # POLICY:
         # Include every touched leg fully, but do not include extra untouched legs.
         # ---------------------------------------------------------
-        if other_point and other_point.get("type") == "waypoint":
-            other_name = (
-                other_point.get("display_name")
-                or other_point.get("name")
-                or ""
-            ).strip().upper()
+        other_name = (
+            (other_point.get("display_name") or other_point.get("name") or "").strip().upper()
+            if other_point else ""
+        )
+        _is_kz = (fir_hint or "").strip().upper().startswith("KZ")
+        _same_anchor = bool(other_name) and other_name == fix_name
 
+        # China: unchanged. KZ only: if the opposite endpoint IS this anchor
+        # (e.g. "BTN ATTIK AND 50NM SE ATTIK"), skip MODE1 and walk the airway
+        # from the anchor -> yields ATTIK-SATOW, not ATTIK-50nm.
+        if (
+            other_point
+            and other_point.get("type") == "waypoint"
+            and not (_is_kz and _same_anchor)
+        ):
             snapped = _resolve_dist_dir_against_waypoint_on_route(
                 route=route,
                 anchor_name=fix_name,
@@ -1374,7 +1382,9 @@ STANDALONE_COORD_RE = re.compile(_COORD_TOKEN, re.IGNORECASE)
 
 # ── KZ-specific closure patterns ──────────────────────────────────────────────
 KZ_BTN_RE = re.compile(
-    r'\b([A-Z0-9/]+)\s*CLSD\s*BTN\s+([A-Z0-9]{2,10})\s+AND\s+([A-Z0-9]{2,10})\b',
+    r'\b([A-Z0-9/]+)\s+CLSD\b[^.\n]*?\bBTN\s+'          # allows "CLSD FOR NON-RNP... BTN"
+    r'(?P<a>.+?)\s+AND\s+(?P<b>.+?)'                    # endpoints = free tokens (wpt OR dist_dir)
+    r'(?=\s*\.|\s+RERTE\b|\s+REFER\b|$)',
     re.IGNORECASE
 )
 
@@ -1699,6 +1709,26 @@ def extract_route_only_segments(notam_text: str, fir_hint: str) -> list[dict]:
 
     return segments
 
+def _kz_btn_point(token: str) -> dict:
+    """
+    Build a point for a KZ 'BTN' endpoint.
+    Handles plain waypoints (ATTIK) AND US dist_dir style '50NM SE ATTIK'
+    (no 'OF'), which we normalize to '50NM SE OF ATTIK' so DIST_DIR_RE parses it.
+    """
+    tok = re.sub(r'\s+', ' ', (token or '').strip().upper()).strip(" .:-")
+
+    # inject missing 'OF' -> '50NM SE ATTIK' becomes '50NM SE OF ATTIK'
+    tok = re.sub(
+        r'(\d+(?:\.\d+)?\s*(?:KM|NM|NAUTICAL\s+MILES?))\s+'
+        r'(NORTHEAST|NORTHWEST|SOUTHEAST|SOUTHWEST|NORTH|SOUTH|EAST|WEST|NE|NW|SE|SW|N|S|E|W)\s+'
+        r'(?!OF\b)',
+        r'\1 \2 OF ',
+        tok,
+        flags=re.IGNORECASE,
+    )
+
+    return _make_point(tok)
+
 def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
     """
     Extra parser for KZ-style NOTAMs only.
@@ -1730,11 +1760,15 @@ def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
     for line in lines:
         for m in KZ_BTN_RE.finditer(line):
             route_group = m.group(1).strip().upper()
-            pt_a = m.group(2).strip().upper()
-            pt_b = m.group(3).strip().upper()
+            raw_a = m.group("a").strip().upper()
+            raw_b = m.group("b").strip().upper()
+
+            # endpoints may be waypoints OR dist_dir (e.g. "50NM SE ATTIK")
+            pt_a = _kz_btn_point(raw_a)
+            pt_b = _kz_btn_point(raw_b)
 
             for route in _split_route_group(route_group):
-                key = ("BTN", route, pt_a, pt_b)
+                key = ("BTN", route, raw_a, raw_b)
                 if key in seen:
                     continue
                 seen.add(key)
@@ -1742,8 +1776,10 @@ def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
                 segments.append({
                     "route": route,
                     "raw": m.group(0),
-                    "point_a": {"type": "waypoint", "name": pt_a},
-                    "point_b": {"type": "waypoint", "name": pt_b},
+                    # fresh copies: STEP2 mutates points; shared route groups
+                    # (AR12/Y436) must resolve per-route without bleeding
+                    "point_a": dict(pt_a),
+                    "point_b": dict(pt_b),
                     "kz_style": "btn",
                 })
                 print("BTN MATCH:", m.group(0))

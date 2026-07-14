@@ -1130,6 +1130,8 @@ function renderKzResults(data) {
       const firs = [...new Set([firA, firB].filter(Boolean))].join(' / ');
 
       const warnings = [];
+      if (seg.no_valid_direction)
+        warnings.push(seg.warning || 'No valid point in that direction');
       if (ptA.type === 'waypoint' && ptA.display_lat == null)
         warnings.push(`Waypoint not found: ${ptA.name || ptA.raw}`);
       if (ptB.type === 'waypoint' && ptB.display_lat == null)
@@ -1144,7 +1146,9 @@ function renderKzResults(data) {
           <span class="seg-arrow">→</span>
           <span class="seg-wpt ${ptWptClass(ptB)}">${esc(nameB)}</span>
         </div>
-        <span class="seg-badge">CLOSED</span>
+        ${seg.no_valid_direction
+          ? `<span class="seg-badge" style="color:#f5a623;background:rgba(245,166,35,.12)">NO VALID DIR</span>`
+          : `<span class="seg-badge">CLOSED</span>`}
         ${firs ? `<div class="seg-dist">FIR: ${esc(firs)}</div>` : ''}
         ${warnings.length ? `<div class="seg-dist" style="color:#e24b4a;font-weight:600">⚠ ${warnings.map(esc).join('<br>')}</div>` : ''}
       `;

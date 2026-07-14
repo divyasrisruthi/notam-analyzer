@@ -1083,10 +1083,30 @@ def _build_kz_directional_route_closure(route: str, fix_name: str, dir_text: str
                 best_score = score
                 best_choice = (fix_pos, step)
 
+
     if best_choice is None:
         return None
 
     fix_pos, step = best_choice
+
+    # NUCAR case: if the closest neighbour bearing is >90 deg off the requested
+    # direction, nothing lies that way (NUCAR is the northmost fix on Y374/Y355,
+    # so "N OF NUCAR" has no valid point). Return a flagged no-op instead of
+    # faking a southward closure.
+    if best_score is not None and best_score > 90:
+        log.info(
+            "KZ directional: no valid point %s of %s on %s (off-bearing=%.1f deg)",
+            dir_u, fix_u, route_u, best_score
+        )
+        return {
+            "route": route_u,
+            "raw": f"{route_u} CLSD {dir_u} OF {fix_u}",
+            "point_a": {"type": "waypoint", "name": fix_u},
+            "point_b": {"type": "waypoint", "name": fix_u},
+            "kz_style": "directional_no_point",
+            "no_valid_direction": True,
+            "warning": f"No valid point {dir_u} of {fix_u}",
+        }
 
     start_pos = fix_pos
     end_pos = fix_pos
@@ -1889,6 +1909,8 @@ def _build_kz_copy_output(segments):
     lines = []
     seen = set()
     for seg in segments:
+        if seg.get("no_valid_direction"):
+            continue
         route = (seg.get("route") or "").strip().upper()
         pa = seg.get("point_a", {})
         pb = seg.get("point_b", {})

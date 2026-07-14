@@ -1172,21 +1172,13 @@ def resolve_dist_dir_point(route, point, other_point=None, fir_hint=""):
         # POLICY:
         # Include every touched leg fully, but do not include extra untouched legs.
         # ---------------------------------------------------------
-        other_name = (
-            (other_point.get("display_name") or other_point.get("name") or "").strip().upper()
-            if other_point else ""
-        )
-        _is_kz = (fir_hint or "").strip().upper().startswith("KZ")
-        _same_anchor = bool(other_name) and other_name == fix_name
+        if other_point and other_point.get("type") == "waypoint":
+            other_name = (
+                other_point.get("display_name")
+                or other_point.get("name")
+                or ""
+            ).strip().upper()
 
-        # China: unchanged. KZ only: if the opposite endpoint IS this anchor
-        # (e.g. "BTN ATTIK AND 50NM SE ATTIK"), skip MODE1 and walk the airway
-        # from the anchor -> yields ATTIK-SATOW, not ATTIK-50nm.
-        if (
-            other_point
-            and other_point.get("type") == "waypoint"
-            and not (_is_kz and _same_anchor)
-        ):
             snapped = _resolve_dist_dir_against_waypoint_on_route(
                 route=route,
                 anchor_name=fix_name,
@@ -1577,6 +1569,11 @@ def extract_segments(notam_text: str) -> list[dict]:
             return ""
 
         token = token.strip().upper()
+
+        # A captured point can bleed into the NEXT numbered line because \s in
+        # the token regex matches newlines (e.g. "140KM WEST OF BIKNO\n2.W191").
+        # Keep only the first physical line so the anchor stays "BIKNO", not "BIKNO 2".
+        token = re.split(r'[\r\n]', token, 1)[0].strip()
 
         # remove route/control trailing text accidentally swallowed into the point
         token = re.sub(r'\s+OF\s+ATS\s+RTE\s+[A-Z0-9]+.*$', '', token, flags=re.IGNORECASE)

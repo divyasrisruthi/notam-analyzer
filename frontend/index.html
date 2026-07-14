@@ -236,10 +236,36 @@ textarea::placeholder{color:var(--muted);opacity:.7}
   gap:14px;
 }
 .kz-tile{
+  position:relative;
   background:linear-gradient(180deg,#111827 0%,#0f172a 100%);
   border:1px solid #334155;border-radius:14px;
   padding:12px;height:320px;display:flex;gap:12px;overflow:hidden;
   box-shadow:0 6px 20px rgba(0,0,0,.25);
+}
+.kz-tile.reroute{
+  border:1px solid var(--amber);
+  box-shadow:0 6px 20px rgba(0,0,0,.25), inset 0 0 0 1px rgba(245,166,35,.35);
+  background:linear-gradient(180deg,#1b1608 0%,#141007 100%);
+}
+/* reroute isn't a closure -> show amber line, not red */
+.kz-tile.reroute .viz-vline,
+.kz-tile.reroute .viz-hline{
+  background:var(--amber);
+  box-shadow:0 0 10px rgba(245,166,35,.55);
+}
+.reroute-badge{
+  position:absolute;
+  top:8px;right:8px;z-index:2;
+  display:flex;align-items:center;gap:5px;
+  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;
+  padding:3px 7px;border-radius:6px;
+  background:rgba(245,166,35,.15);
+  border:1px solid var(--amber);
+  color:var(--amber);
+}
+.reroute-badge .dot{
+  width:8px;height:8px;border-radius:50%;
+  background:var(--amber);box-shadow:0 0 6px var(--amber);
 }
 .kz-text{
   flex:0 0 62%;min-width:0;overflow-y:auto;
@@ -1049,19 +1075,39 @@ function renderKzResults(data) {
   const tiles = data.tiles || [];
   currentSegments = segments;
 
-  // ❌ KZ: no Copy DS Portal box
-  document.getElementById('copy-all-section').style.display = 'none';
-  document.getElementById('copy-all-text').textContent = '';
+  // ✅ KZ: Copy DS Portal output (AIRWAY WPTA-WPTB), same as China.
+  // Prefer backend copy_output; fall back to building from segments.
+  const copyAllText = (data.copy_output && data.copy_output.trim())
+    ? data.copy_output.trim()
+    : segments.map(seg => {
+        const a = seg.point_a || {}, b = seg.point_b || {};
+        const nameA = a.display_name || a.name || a.raw || '?';
+        const nameB = b.display_name || b.name || b.raw || '?';
+        return `${seg.route} ${nameA}-${nameB}`;
+      }).join('\n');
+
+  const copyAllSection = document.getElementById('copy-all-section');
+  const copyAllTextEl  = document.getElementById('copy-all-text');
+  if (copyAllText) {
+    copyAllSection.style.display = 'block';
+    copyAllTextEl.textContent = copyAllText;
+  } else {
+    copyAllSection.style.display = 'none';
+    copyAllTextEl.textContent = '';
+  }
 
   // ── 💙 Airways Found list ──
   const awSection = document.getElementById('kz-airways-section');
   const awList    = document.getElementById('kz-airways-list');
   const awCount   = document.getElementById('kz-airways-count');
-  const airways   = tiles.map(t => t.airway);
-  if (airways.length) {
+  if (tiles.length) {
     awSection.style.display = 'block';
-    awCount.textContent = `(${airways.length})`;
-    awList.innerHTML = airways.map(a => `<div class="aw">• ${esc(a)}</div>`).join('');
+    awCount.textContent = `(${tiles.length})`;
+    awList.innerHTML = tiles.map(t => {
+      const style = t.is_reroute ? ' style="color:var(--amber)"' : '';
+      const tag   = t.is_reroute ? ' <span style="color:var(--amber);font-size:9px">· RERTE</span>' : '';
+      return `<div class="aw"${style}>• ${esc(t.airway)}${tag}</div>`;
+    }).join('');
   } else {
     awSection.style.display = 'none';
     awList.innerHTML = '';
@@ -1120,7 +1166,12 @@ function renderKzResults(data) {
 
   tiles.forEach(t => {
     const tile = document.createElement('div');
-    tile.className = 'kz-tile';
+    tile.className = 'kz-tile' + (t.is_reroute ? ' reroute' : '');
+
+    // corner label for reroute (detour) airways from RERTE VIA ...
+    const badgeHtml = t.is_reroute
+      ? `<div class="reroute-badge"><span class="dot"></span>RERTE</div>`
+      : '';
 
     const wpHtml = t.waypoints.map(w =>
       `<div class="kz-wp">${esc(w.name)} <span class="fir">(${esc(w.fir||'-')})</span></div>`
@@ -1149,6 +1200,7 @@ function renderKzResults(data) {
     }
 
     tile.innerHTML = `
+    ${badgeHtml}
       <div class="kz-text">
         <div class="kz-title">${esc(t.airway)}</div>
         ${wpHtml}

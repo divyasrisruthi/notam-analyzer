@@ -1100,21 +1100,13 @@ def _build_kz_directional_route_closure(route: str, fix_name: str, dir_text: str
         meta = WPT_META[idxs[pos]]
         meta_fir = meta.get("fir", "").strip().upper()
 
-        # Different family -> stop
+        # Stop ONLY when we leave the NOTAM FIR family entirely
+        # (e.g. US family -> CY). K1-K7 / KZ / TJ are ALL US family and
+        # must stay included, so the closure runs to the full route extent.
         if _fir_family(meta_fir) != notam_family:
             break
 
         end_pos = pos
-
-        # Important: allow ONE transition into K6/K7/TJ then STOP
-        if (
-            notam_family == "US_FAMILY"
-            and not meta_fir.startswith("KZ")
-            and _is_us_bridge_code(meta_fir)
-        ):
-            used_bridge_once = True
-            break
-
         pos += step
 
     if end_pos == fix_pos:
@@ -1394,7 +1386,9 @@ KZ_DIR_RE = re.compile(
 )
 
 KZ_ROUTE_ONLY_CLSD_RE = re.compile(
-    r'\b([A-Z0-9/]+)\s*CLSD\b',
+    r'\b([A-Z0-9/]+)\s*CLSD\b'
+    r'(?!\s+(?:BTN|NORTHWEST|NORTHEAST|SOUTHWEST|SOUTHEAST|'
+    r'NORTH|SOUTH|EAST|WEST|NW|NE|SW|SE|N|S|E|W)\b)',
     re.IGNORECASE
 )
 
@@ -1722,11 +1716,11 @@ def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
     segments = []
     seen = set()
 
-    lines = [
-        re.sub(r'\s+', ' ', line.strip().upper())
-        for line in notam_text.splitlines()
-        if line.strip()
-    ]
+    # Flatten the whole NOTAM to one line so closure statements that wrap
+    # across newlines (e.g. "AR17\nCLSD.", "AR23 CLSD N\nOF ZFP",
+    # "Y493/Y494\nCLSD.") are still captured. All 3 passes run on this.
+    flat = re.sub(r'\s+', ' ', notam_text.upper()).strip()
+    lines = [flat]
 
     # 1) BTN closures
     # Examples:
@@ -1788,11 +1782,9 @@ def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
     #
     # Skip lines already handled as BTN or directional.
     for line in lines:
-        if " BTN " in line:
-            continue
-        if re.search(r'\b(NW|NE|SW|SE|NORTH|SOUTH|EAST|WEST|N|S|E|W)\s+OF\b', line):
-            continue
-
+       # BTN / directional closures are now excluded by the negative
+        # lookahead in KZ_ROUTE_ONLY_CLSD_RE, so no per-line skipping
+        # (that skip nuked the whole string once we flattened it).
         for m in KZ_ROUTE_ONLY_CLSD_RE.finditer(line):
             route_group = m.group(1).strip().upper()
 
@@ -1853,7 +1845,33 @@ def health():
         "airways_loaded": len(WPT_BY_AIRWAY),
     }), 200 if healthy else 503
 
-def _build_kz_tiles(notam_text: str):
+def _build_kz_copy_output(segments):
+    """
+    DS-portal copyable text for KZ, one line per CLOSED segment:
+        AR16 PERMT-SEELO
+        Y488 WEBBB-SAUCR
+    Mirrors China copy-all format (AIRWAY WPTA-WPTB).
+    Reroute airways are never here because they never become segments.
+    """
+    lines = []
+    seen = set()
+    for seg in segments:
+        route = (seg.get("route") or "").strip().upper()
+        pa = seg.get("point_a", {})
+        pb = seg.get("point_b", {})
+        a = (pa.get("display_name") or pa.get("name") or pa.get("raw") or "").strip().upper()
+        b = (pb.get("display_name") or pb.get("name") or pb.get("raw") or "").strip().upper()
+        if not route or not a or not b:
+            continue
+        line = f"{route} {a}-{b}"
+        if line in seen:
+            continue
+        seen.add(line)
+        lines.append(line)
+    return "\n".join(lines)
+
+def _build_kz_tiles(notam_text: str, closed_routes=None):
+    closed_routes = {r.strip().upper() for r in (closed_routes or set())}
     """Build airway visual tiles for KZ NOTAMs (right-side grid only)."""
     normalized = re.sub(r"[^A-Z0-9/ ]", " ", notam_text.upper())
     tokens = re.split(r"[ /]+", normalized)
@@ -1895,6 +1913,7 @@ def _build_kz_tiles(notam_text: str):
             "waypoints": waypoints,
             "count": len(waypoints),
             "extremes": extremes,
+            "is_reroute": awy not in closed_routes, # ✅ true = detour route, not closed
         })
     return tiles
 
@@ -2338,7 +2357,8 @@ def analyze():
         "valid_to":       valid_c.group(1) if valid_c else None,
         "segments":       segments,
         "total_segments": len(segments),
-        "tiles":          _build_kz_tiles(notam_text) if is_kz else [],
+        "tiles":          _build_kz_tiles(notam_text, {s.get("route","").strip().upper() for s in segments}) if is_kz else [],
+        "copy_output":    _build_kz_copy_output(segments) if is_kz else "",
         "total_airways":  0,
     }
     if is_kz:

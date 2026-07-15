@@ -1393,10 +1393,44 @@ ROUTE_ONLY_RE = re.compile(
 STANDALONE_COORD_RE = re.compile(_COORD_TOKEN, re.IGNORECASE)
 
 # ── KZ-specific closure patterns ──────────────────────────────────────────────
+# Airway route token (MUST contain a digit -> excludes words like "BE", "CLSD")
+_KZ_ROUTE = r'(?:[A-Z]{1,3}\d{1,4}[A-Z]?)(?:/[A-Z]{1,3}\d{1,4}[A-Z]?)*'
+
+# Directional qualifier that can hug a BTN endpoint (Y306 NW BTN ... / ... HAGIT NB.)
+_KZ_DIRQ = r'(?:NB|SB|EB|WB|NW|NE|SW|SE)'
+
+# A BTN endpoint = a dist_dir (US style, 'OF' optional) OR a plain fix.
+# BOUNDED so it never swallows following list items on flattened text.
+_KZ_ENDPOINT = (
+    r'(?:'
+    r'\d+(?:\.\d+)?\s*(?:KM|NM|NAUTICAL\s+MILES?)\s+'
+    r'(?:NORTHEAST|NORTHWEST|SOUTHEAST|SOUTHWEST|NORTH|SOUTH|EAST|WEST|NE|NW|SE|SW|N|S|E|W)\s+'
+    r'(?:OF\s+)?[A-Z]{2,6}'      # e.g. 50NM SE ATTIK  ('OF' optional)
+    r'|'
+    r'[A-Z]{2,6}'                # plain fix e.g. HARBG, GTK, PVN
+    r')'
+)
+
+# BTN closures WITH the word CLSD (e.g. "AR12/Y436 CLSD BTN RROOO AND JAINS")
 KZ_BTN_RE = re.compile(
-    r'\b([A-Z0-9/]+)\s+CLSD\b[^.\n]*?\bBTN\s+'          # allows "CLSD FOR NON-RNP... BTN"
-    r'(?P<a>.+?)\s+AND\s+(?P<b>.+?)'                    # endpoints = free tokens (wpt OR dist_dir)
-    r'(?=\s*\.|\s+RERTE\b|\s+REFER\b|$)',
+    r'\b(' + _KZ_ROUTE + r')\s+CLSD\b[^.\n]*?\bBTN\s+'
+    r'(?P<a>' + _KZ_ENDPOINT + r')\s+AND\s+(?P<b>' + _KZ_ENDPOINT + r')'
+    r'(?:\s+' + _KZ_DIRQ + r')?',
+    re.IGNORECASE
+)
+
+# BTN closures WITHOUT CLSD (list style under a shared "... TO BE CLSD:" header)
+#   Y330 BTN FODED AND HARBG
+#   Y306 NW BTN CHASO AND HAGIT
+#   L463/BR2L BTN JUELE AND PVN
+# Anchored per-line so mid-sentence reroute strings are never matched.
+KZ_BTN_NOCLSD_RE = re.compile(
+    r'^\s*(' + _KZ_ROUTE + r')'
+    r'(?:\s+' + _KZ_DIRQ + r')?'          # optional dir before BTN (e.g. "NW")
+    r'\s+BTN\s+'
+    r'(?P<a>' + _KZ_ENDPOINT + r')\s+AND\s+(?P<b>' + _KZ_ENDPOINT + r')'
+    r'(?:\s+' + _KZ_DIRQ + r')?'         # optional trailing dir (e.g. "NB", "WB")
+    r'\s*\.?\s*$',
     re.IGNORECASE
 )
 
@@ -1800,6 +1834,58 @@ def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
                     "kz_style": "btn",
                 })
                 print("BTN MATCH:", m.group(0))
+    # 1b) BTN closures WITHOUT CLSD (list style). These are only valid when we
+    #     are inside a "...TO BE CLSD:" section. A "RERTE" line ends the section.
+    #     This prevents a stray "ROUTE BTN A AND B" under a reroute header from
+    #     being mis-flagged as a closure (deterministic, header-gated).
+    in_closure_section = False
+
+    for raw_line in notam_text.splitlines():
+        line_up = raw_line.strip().upper()
+        if not line_up:
+            continue
+
+        # ── section state toggle ──
+        # CLSD wins on mixed lines (e.g. "...RERTE... TO BE CLSD:" spans),
+        # so check RERTE first, then let a CLSD/CLOSED header re-open.
+        if re.search(r'\bRERTE\b', line_up):
+            in_closure_section = False
+        if re.search(r'\bCLSD\b|\bCLOSED\b', line_up):
+            in_closure_section = True
+
+        # only capture list-style BTN lines while inside a closure section
+        if not in_closure_section:
+            continue
+        if " BTN " not in line_up:
+            continue
+        if " CLSD" in line_up:            # explicit CLSD-BTN handled by pass 1
+            continue
+
+        m = KZ_BTN_NOCLSD_RE.match(line_up)
+        if not m:
+            continue
+
+        route_group = m.group(1).strip().upper()
+        raw_a = m.group("a").strip().upper()
+        raw_b = m.group("b").strip().upper()
+
+        pt_a = _kz_btn_point(raw_a)
+        pt_b = _kz_btn_point(raw_b)
+
+        for route in _split_route_group(route_group):
+            key = ("BTN", route, raw_a, raw_b)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            segments.append({
+                "route": route,
+                "raw": raw_line.strip(),
+                "point_a": dict(pt_a),
+                "point_b": dict(pt_b),
+                "kz_style": "btn_noclsd",
+            })
+            print("BTN(no CLSD) MATCH:", line_up)
     # 2) Directional closures
     # Examples:
     #   Y185/Y585 CLSD NW OF RENAH

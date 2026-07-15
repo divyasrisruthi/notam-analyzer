@@ -1150,6 +1150,7 @@ function renderKzResults(data) {
           ? `<span class="seg-badge" style="color:#f5a623;background:rgba(245,166,35,.12)">NO VALID DIR</span>`
           : `<span class="seg-badge">CLOSED</span>`}
         ${firs ? `<div class="seg-dist">FIR: ${esc(firs)}</div>` : ''}
+        ${seg.bidirectional ? `<div class="seg-dist" style="color:#5a8aaa">↔ Same waypoints listed both ways (${esc(nameA)}→${esc(nameB)} and ${esc(nameB)}→${esc(nameA)})</div>` : ''}
         ${warnings.length ? `<div class="seg-dist" style="color:#e24b4a;font-weight:600">⚠ ${warnings.map(esc).join('<br>')}</div>` : ''}
       `;
       list.appendChild(card);

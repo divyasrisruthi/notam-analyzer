@@ -2004,11 +2004,13 @@ def _build_kz_copy_output(segments):
         b = (pb.get("display_name") or pb.get("name") or pb.get("raw") or "").strip().upper()
         if not route or not a or not b:
             continue
-        line = f"{route} {a}-{b}"
-        if line in seen:
+        # direction-insensitive: same route + same endpoint PAIR (any order) = one.
+        # e.g. "M594 POKEG-WATRS" and "M594 WATRS-POKEG" collapse to the first seen.
+        key = (route, frozenset((a, b)))
+        if key in seen:
             continue
-        seen.add(line)
-        lines.append(line)
+        seen.add(key)
+        lines.append(f"{route} {a}-{b}")   # keeps original NOTAM order of first hit
     return "\n".join(lines)
 
 def _build_kz_tiles(notam_text: str, closed_routes=None):
@@ -2488,6 +2490,31 @@ def analyze():
                     "display_fir": ""
                 })
 
+    # ── KZ-only: collapse direction-flipped duplicate segments ──
+    # "M594 POKEG-WATRS" + "M594 WATRS-POKEG" -> ONE card. The kept segment is
+    # flagged bidirectional so the UI can note it was listed both ways.
+    if _is_kz_notam(notam_text):
+        deduped = []
+        seen_pairs = {}
+        for seg in segments:
+            route = (seg.get("route") or "").strip().upper()
+            pa = seg.get("point_a", {})
+            pb = seg.get("point_b", {})
+            a = (pa.get("display_name") or pa.get("name") or pa.get("raw") or "").strip().upper()
+            b = (pb.get("display_name") or pb.get("name") or pb.get("raw") or "").strip().upper()
+
+            # keep unresolved / incomplete segments as-is (can't key safely)
+            if not route or not a or not b:
+                deduped.append(seg)
+                continue
+
+            key = (route, frozenset((a, b)))   # order-insensitive pair per route
+            if key in seen_pairs:
+                seen_pairs[key]["bidirectional"] = True   # flag the one we keep
+                continue
+            seen_pairs[key] = seg
+            deduped.append(seg)
+        segments = deduped
 
     is_kz = _is_kz_notam(notam_text)
     result = {

@@ -103,6 +103,14 @@ textarea::placeholder{color:var(--muted);opacity:.7}
   overflow:hidden;
   flex:1;
   min-width:0;
+  display:flex;
+}
+
+#map{
+  width:100%;
+  height:100%;
+  flex:1;
+  min-width:0;
 }
 #map{width:100%;height:100%}
 .leaflet-container{background:#d4e0f0}
@@ -226,13 +234,136 @@ textarea::placeholder{color:var(--muted);opacity:.7}
 
 /* KZ tile grid replaces the map area */
 .kz-view{
-  display:none;width:100%;height:100%;overflow-y:auto;
-  padding:16px;background:#0b0f19;
+  display:none;
+  flex:1;
+  min-width:0;
+  height:100%;
+  overflow-y:auto;
+  padding:16px;
+  background:#0b0f19;
 }
 .kz-view.active{display:block}
+/* Middle affected segments panel - used by BOTH China and KZ */
+.segment-panel{
+  width:310px;
+  min-width:230px;
+  max-width:800px;
+  height:100%;
+  background:#0b1728;
+  border-right:1px solid var(--border);
+  flex-shrink:0;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+}
+
+.segment-panel.collapsed{
+  width:42px !important;
+  min-width:42px !important;
+  max-width:42px !important;
+
+  border-right:none;
+}
+
+.segment-panel.collapsed .segment-panel-title,
+.segment-panel.collapsed .segment-panel-sub,
+.segment-panel.collapsed .seg-scroll{
+  display:none;
+}
+
+.segment-panel-header{
+  height:54px;
+  flex-shrink:0;
+  padding:10px 10px;
+  border-bottom:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:8px;
+  background:#0d1e33;
+  position:relative;
+}
+
+.segment-panel.collapsed .segment-panel-header{
+  justify-content:center;
+  padding:0;
+}
+
+.segment-panel-title{
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:700;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:.11em;
+  white-space:nowrap;
+}
+
+.segment-panel-sub{
+  margin-top:3px;
+  font-family:var(--mono);
+  font-size:9px;
+  color:var(--muted);
+  white-space:nowrap;
+}
+
+.segment-collapse-btn{
+  width:26px;
+  height:26px;
+  border-radius:7px;
+  border:1px solid var(--border);
+  background:var(--navy3);
+  color:var(--teal);
+  cursor:pointer;
+  font-family:var(--mono);
+  font-size:12px;
+  font-weight:700;
+  flex-shrink:0;
+}
+
+.segment-collapse-btn:hover{
+  border-color:var(--teal);
+  background:rgba(0,212,170,.12);
+}
+
+#segment-dragbar{
+  width:5px;
+  cursor:col-resize;
+  background:transparent;
+  flex-shrink:0;
+  z-index:60;
+}
+.segment-panel.collapsed + #segment-dragbar{
+display:none;
+}
+
+#segment-dragbar:hover{
+  background:rgba(0,229,255,.35);
+}
+
+/* segment cards inside middle panel */
+.segment-panel .seg-scroll{
+  flex:1;
+  overflow-y:auto;
+  padding:10px;
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(180px,1fr));
+  align-content:start;
+  gap:10px;
+}
+
+.segment-panel .seg-card{
+  border-color:rgba(0,212,170,.22);
+}
+
+.segment-panel .seg-card:hover{
+  border-color:var(--teal);
+  transform:translateY(-1px);
+}
+
 .kz-grid{
   display:grid;
-  grid-template-columns:repeat(auto-fill,minmax(320px,1fr));
+  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
   gap:14px;
 }
 .kz-tile{
@@ -382,9 +513,7 @@ textarea::placeholder{color:var(--muted);opacity:.7}
       </div>
       <div class="airway-list" id="kz-airways-list"></div>
     </div>
-    <div class="p-section" style="border-bottom:none;padding-bottom:6px">
-      <div class="p-label">Affected Segments <span id="seg-count" style="color:var(--teal)"></span></div>
-    </div>
+  
     
     <div class="copy-all-section" id="copy-all-section" style="display:none">
       <div class="copy-all-box">
@@ -395,16 +524,32 @@ textarea::placeholder{color:var(--muted);opacity:.7}
     </div>
 
 
-    <div class="seg-scroll" id="seg-list">
-      <div class="empty"><div class="empty-icon">✈</div>Paste a NOTAM and click Analyze.</div>
-    </div>
+    
   </aside>
 
 
-  <section class="map-wrap">
+    <section class="map-wrap">
+
+    <div class="segment-panel" id="segment-panel">
+      <div class="segment-panel-header">
+        <div>
+          <div class="segment-panel-title">Affected Segments <span id="seg-count" style="color:var(--teal)"></span></div>
+          <div class="segment-panel-sub" id="segment-panel-sub"></div>
+        </div>
+        <button class="segment-collapse-btn" id="segment-collapse-btn" onclick="toggleSegmentPanel()">◀</button>
+      </div>
+
+      <div class="seg-scroll" id="seg-list">
+        <div class="empty"><div class="empty-icon">✈</div>
+        Paste a KZ/China NOTAM and click Analyze.</div>
+      </div>
+    </div>
+
+    <div id="segment-dragbar"></div>
+
     <div id="map"></div>
     <div class="kz-view" id="kz-view">
-      <div class="kz-empty" id="kz-empty">Paste a KZ NOTAM and click Analyze.</div>
+      <div class="kz-empty" id="kz-empty">Paste a KZ/China NOTAM and click Analyze.</div>
       <div class="kz-grid" id="kz-grid"></div>
     </div>
     <div class="legend">
@@ -944,7 +1089,15 @@ function clearMap() {
 function clearAll() {
   clearMap();
   document.getElementById('notam-input').value='';
-  document.getElementById('seg-list').innerHTML='<div class="empty"><div class="empty-icon">✈</div>Paste a NOTAM and click Analyze.</div>';
+  document.getElementById('seg-list').innerHTML='<div class="empty"><div class="empty-icon">✈</div>Paste a KZ/China NOTAM and click Analyze.</div>';
+    const segPanel = document.getElementById('segment-panel');
+  if (segPanel) {
+    segPanel.classList.remove('collapsed');
+    segPanel.style.width = '310px';
+  }
+
+  const segBtn = document.getElementById('segment-collapse-btn');
+  if (segBtn) segBtn.textContent = '◀';
   document.getElementById('meta-section').style.display='none';
   document.getElementById('seg-count').textContent='';
   document.getElementById('copy-all-section').style.display='none';
@@ -954,7 +1107,7 @@ function clearAll() {
   const awSec2 = document.getElementById('kz-airways-section');
   if (awSec2) awSec2.style.display = 'none';
   const kzEmpty = document.getElementById('kz-empty');
-  if (kzEmpty) { kzEmpty.style.display = 'block'; kzEmpty.textContent = 'Paste a KZ NOTAM and click Analyze.'; }
+  if (kzEmpty) { kzEmpty.style.display = 'block'; kzEmpty.textContent = 'Paste a KZ/China NOTAM and click Analyze.'; }
   setStatus('Ready','idle');
 }
 function haversineNM(lat1,lon1,lat2,lon2) {
@@ -1046,6 +1199,9 @@ document.addEventListener('mouseup', () => {
 function switchToKzView() {
   document.getElementById('map').style.display = 'none';
   document.getElementById('kz-view').classList.add('active');
+  const sub = document.getElementById('segment-panel-sub');
+  if (sub) sub.textContent = 'Affected airway closures';
+
   const legend = document.querySelector('.legend');
   if (legend) legend.style.display = 'none';
 }
@@ -1053,9 +1209,13 @@ function switchToKzView() {
 function switchToChinaView() {
   document.getElementById('map').style.display = 'block';
   document.getElementById('kz-view').classList.remove('active');
+
+  const sub = document.getElementById('segment-panel-sub');
+  if (sub) sub.textContent = 'Click a segment to zoom';
+
   const legend = document.querySelector('.legend');
   if (legend) legend.style.display = 'block';
-  if (map) setTimeout(() => map.invalidateSize(), 50);
+  if (map) setTimeout(() => map.invalidateSize(), 80);
 }
 
 function toggleAirways() {
@@ -1065,6 +1225,72 @@ function toggleAirways() {
   list.style.display = collapsed ? 'block' : 'none';
   caret.textContent  = collapsed ? '▾' : '▸';
 }
+
+function toggleSegmentPanel() {
+  const panel = document.getElementById('segment-panel');
+  const btn   = document.getElementById('segment-collapse-btn');
+
+  if (!panel || !btn) return;
+
+  const collapsed = panel.classList.toggle('collapsed');
+  btn.textContent = collapsed ? '▶' : '◀';
+
+  if (map) {
+    setTimeout(() => map.invalidateSize(), 80);
+  }
+}
+
+// ── Middle segment panel resize ─────────────────────────────────────
+(function () {
+
+  const panel = document.getElementById('segment-panel');
+  const drag  = document.getElementById('segment-dragbar');
+
+  if (!panel || !drag) return;
+
+  let dragging = false;
+
+  drag.addEventListener('mousedown', (e) => {
+    if (panel.classList.contains('collapsed')) return;
+
+    dragging = true;
+    document.body.style.cursor = 'col-resize';
+
+    e.preventDefault();
+  });
+
+  document.addEventListener('mousemove', (e) => {
+
+    if (!dragging) return;
+
+    const left = panel.getBoundingClientRect().left;
+
+    let newWidth = e.clientX - left;
+
+    if (newWidth < 230) newWidth = 230;
+    if (newWidth > 560) newWidth = 560;
+
+    panel.style.width = newWidth + 'px';
+
+    if (map) {
+      map.invalidateSize();
+    }
+  });
+
+  document.addEventListener('mouseup', () => {
+
+    if (!dragging) return;
+
+    dragging = false;
+
+    document.body.style.cursor = 'default';
+
+    if (map) {
+      setTimeout(() => map.invalidateSize(), 80);
+    }
+  });
+
+})();
 
 // ── Render KZ tile results ───────────────────────────────────────────────
 function renderKzResults(data) {

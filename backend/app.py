@@ -775,6 +775,9 @@ def _locate_dist_dir_leg_on_airway(
 
         if target_positions:
             for anchor_pos in anchor_positions:
+                anchor_idx = idxs[anchor_pos]
+                anchor_lat, anchor_lon = WPT_COORDS[anchor_idx]
+
                 for target_pos in target_positions:
                     if target_pos == anchor_pos:
                         continue
@@ -783,6 +786,18 @@ def _locate_dist_dir_leg_on_airway(
                     next_pos = anchor_pos + step
 
                     if not (0 <= next_pos < len(idxs)):
+                        continue
+
+                    # ✅ Only walk TOWARD the fixed endpoint if that direction is
+                    # consistent with the dist_dir bearing. When the dist_dir points
+                    # AWAY from the fixed endpoint (point lies BEYOND the anchor,
+                    # enclosing it), forcing the toward-endpoint walk is wrong.
+                    # e.g. "BEVTA - 50KM WEST OF SADAN": WEST is away from BEVTA,
+                    # so PRIORITY 1 must NOT fire -> fall through to bearing walk.
+                    next_idx = idxs[next_pos]
+                    next_lat, next_lon = WPT_COORDS[next_idx]
+                    step_brg = _bearing(anchor_lat, anchor_lon, next_lat, next_lon)
+                    if ang_diff(step_brg, bearing_deg) > 90:
                         continue
 
                     # Pick closest fixed endpoint occurrence in route order.

@@ -2002,8 +2002,8 @@ def health():
 def _build_kz_copy_output(segments):
     """
     DS-portal copyable text for KZ, one line per CLOSED segment:
-        AR16 PERMT-SEELO
-        Y488 WEBBB-SAUCR
+        AR16, PERMT-SEELO
+        Y488, WEBBB-SAUCR
     Mirrors China copy-all format (AIRWAY WPTA-WPTB).
     Reroute airways are never here because they never become segments.
     """
@@ -2025,7 +2025,7 @@ def _build_kz_copy_output(segments):
         if key in seen:
             continue
         seen.add(key)
-        lines.append(f"{route} {a}-{b}")   # keeps original NOTAM order of first hit
+        lines.append(f"{route}, {a}-{b}") # e.g. "M596, POKEG-WATRS"  # keeps original NOTAM order of first hit
     return "\n".join(lines)
 
 def _build_kz_tiles(notam_text: str, closed_routes=None):

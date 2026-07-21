@@ -696,7 +696,7 @@ function renderResults(data) {
   const nameA = ptA.display_name || ptA.name || ptA.raw || '?';
   const nameB = ptB.display_name || ptB.name || ptB.raw || '?';
 
-  return `${seg.route}, ${nameA}-${nameB}`;
+  return `${seg.route} ${nameA}-${nameB},`;
 });
 
 const copyAllText = copyAllLines.join('\n');

@@ -2025,7 +2025,7 @@ def _build_kz_copy_output(segments):
         if key in seen:
             continue
         seen.add(key)
-        lines.append(f"{route}, {a}-{b}") # e.g. "M596, POKEG-WATRS"  # keeps original NOTAM order of first hit
+        lines.append(f"{route} {a}-{b},") # e.g. "M596, POKEG-WATRS"  # keeps original NOTAM order of first hit
     return "\n".join(lines)
 
 def _build_kz_tiles(notam_text: str, closed_routes=None):

@@ -464,6 +464,13 @@ display:none;
   padding:40px;text-align:center;color:var(--muted);
   font-family:var(--mono);font-size:13px;
 }
+/* KZ: tool-CALCULATED waypoint (distance / direction / between) — cyan,
+   deliberately NOT amber so it never clashes with the reroute-yellow tiles */
+.seg-wpt.calc{
+  background:rgba(34,211,238,.15);
+  color:#ee22e7;
+  border:1px solid rgba(153, 34, 238, 0.504);
+}
 
 </style>
 </head>
@@ -668,6 +675,18 @@ function ptWptClass(pt) {
   return 'named';
 }
 
+// KZ-only: any endpoint the tool CALCULATED -> cyan highlight.
+//   dist_dir  = "50NM SE ATTIK" -> SATOW
+//   coord     = raw coordinate snapped to a waypoint
+//   calc flag = "S OF PRMUS" -> MANLE  (directional)
+// Endpoints typed verbatim in the NOTAM stay teal ('named').
+function kzWptClass(pt) {
+  if (!pt) return 'named';
+  if (pt.type === 'dist_dir') return 'calc';
+  if (pt.type === 'coord')    return 'calc';
+  if (pt.calc)                return 'calc';
+  return 'named';
+}
 
 function ptMarkerColor(pt) {
   if (pt.type === 'dist_dir') return '#f5a623';
@@ -1350,32 +1369,61 @@ function renderKzResults(data) {
     segments.forEach(seg => {
       const ptA = seg.point_a || {};
       const ptB = seg.point_b || {};
+      const badSeg = seg.route_not_found || seg.fix_not_found;
       const nameA = ptA.display_name || ptA.name || ptA.raw || '?';
       const nameB = ptB.display_name || ptB.name || ptB.raw || '?';
       const firA = ptA.display_fir || '', firB = ptB.display_fir || '';
       const firs = [...new Set([firA, firB].filter(Boolean))].join(' / ');
 
+      // Calc-detail line, same idea as China ("50NM 135° from ATTIK → SATOW")
+      const calcParts = [];
+      [[ptA, nameA], [ptB, nameB]].forEach(([pt, nm]) => {
+        if (pt.type === 'dist_dir' && pt.nearest) {
+          calcParts.push(`${pt.dist_nm}NM ${pt.bearing}° from ${pt.fix_name} → ${nm}`);
+        } else if (pt.calc && pt.calc_info) {
+          calcParts.push(`${pt.calc_info} → ${nm}`);
+        }
+      });
+
       const warnings = [];
-      if (seg.no_valid_direction)
+      if (seg.route_not_found)
+        warnings.push(seg.warning || `Airway ${seg.route} does not exist`);
+      else if (seg.fix_not_found)
+        warnings.push(seg.warning || `Waypoint not found on ${seg.route}`);
+      else if (seg.no_valid_direction)
         warnings.push(seg.warning || 'No valid point in that direction');
-      if (ptA.type === 'waypoint' && ptA.display_lat == null)
+      if (!badSeg && ptA.type === 'waypoint' && ptA.display_lat == null)
         warnings.push(`Waypoint not found: ${ptA.name || ptA.raw}`);
-      if (ptB.type === 'waypoint' && ptB.display_lat == null)
+      if (!badSeg && ptB.type === 'waypoint' && ptB.display_lat == null)
         warnings.push(`Waypoint not found: ${ptB.name || ptB.raw}`);
+
+      let badgeHtml;
+      if (seg.route_not_found)
+        badgeHtml = `<span class="seg-badge">AIRWAY NOT FOUND</span>`;
+      else if (seg.fix_not_found)
+        badgeHtml = `<span class="seg-badge">NO VALID WAYPOINT</span>`;
+      else if (seg.no_valid_direction)
+        badgeHtml = `<span class="seg-badge" style="color:#f5a623;background:rgba(245,166,35,.12)">NO VALID DIR</span>`;
+      else
+        badgeHtml = `<span class="seg-badge">CLOSED</span>`;
+
+      // Hide the fake "X → X" path for bad segments
+      const pathHtml = badSeg
+        ? `<div class="seg-path"><span class="seg-wpt" style="opacity:.6">—</span></div>`
+        : `<div class="seg-path">
+            <span class="seg-wpt ${kzWptClass(ptA)}">${esc(nameA)}</span>
+            <span class="seg-arrow">→</span>
+            <span class="seg-wpt ${kzWptClass(ptB)}">${esc(nameB)}</span>
+           </div>`;
 
       const card = document.createElement('div');
       card.className = 'seg-card';
       card.innerHTML = `
         <div class="seg-route">${esc(seg.route)}</div>
-        <div class="seg-path">
-          <span class="seg-wpt ${ptWptClass(ptA)}">${esc(nameA)}</span>
-          <span class="seg-arrow">→</span>
-          <span class="seg-wpt ${ptWptClass(ptB)}">${esc(nameB)}</span>
-        </div>
-        ${seg.no_valid_direction
-          ? `<span class="seg-badge" style="color:#f5a623;background:rgba(245,166,35,.12)">NO VALID DIR</span>`
-          : `<span class="seg-badge">CLOSED</span>`}
-        ${firs ? `<div class="seg-dist">FIR: ${esc(firs)}</div>` : ''}
+        ${pathHtml}
+        ${badgeHtml}
+        ${firs && !badSeg ? `<div class="seg-dist">FIR: ${esc(firs)}</div>` : ''}
+        ${calcParts.length ? `<div class="seg-dist">${calcParts.map(esc).join('<br>')}</div>` : ''}
         ${seg.bidirectional ? `<div class="seg-dist" style="color:#5a8aaa">↔ Same waypoints listed both ways (${esc(nameA)}→${esc(nameB)} and ${esc(nameB)}→${esc(nameA)})</div>` : ''}
         ${warnings.length ? `<div class="seg-dist" style="color:#e24b4a;font-weight:600">⚠ ${warnings.map(esc).join('<br>')}</div>` : ''}
       `;

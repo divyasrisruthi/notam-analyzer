@@ -1060,7 +1060,22 @@ def _build_kz_directional_route_closure(route: str, fix_name: str, dir_text: str
 
     idxs = WPT_BY_AIRWAY.get(route_u, [])
     if not idxs:
-        return None
+        # Airway (e.g. Y585) is NOT in the waypoint database at all.
+        # Do NOT fall back to a fake FIX->FIX closure. Flag it so the UI can
+        # say "airway not found", and it's kept out of the copy output.
+        log.info("KZ directional: airway %s not in database", route_u)
+        return {
+            "route": route_u,
+            "raw": f"{route_u} CLSD {dir_u} OF {fix_u}",
+            "point_a": {"type": "invalid", "name": fix_u, "display_name": fix_u,
+                        "display_lat": None, "display_lon": None, "display_fir": ""},
+            "point_b": {"type": "invalid", "name": fix_u, "display_name": fix_u,
+                        "display_lat": None, "display_lon": None, "display_fir": ""},
+            "kz_style": "route_not_found",
+            "route_not_found": True,
+            "no_valid_direction": True,   # reuse existing flag -> skipped in copy output
+            "warning": f"Airway {route_u} does not exist in the waypoint database",
+        }
 
     target_bearing = DIR_BEARING.get(dir_u)
     if target_bearing is None:
@@ -1071,7 +1086,21 @@ def _build_kz_directional_route_closure(route: str, fix_name: str, dir_text: str
         if WPT_META[idx]["name"].strip().upper() == fix_u
     ]
     if not fix_positions:
-        return None
+        # The anchor fix (e.g. CANIT) is not a station on THIS airway.
+        # Don't fabricate a FIX->FIX closure; flag it like "waypoint not found".
+        log.info("KZ directional: fix %s not on airway %s", fix_u, route_u)
+        return {
+            "route": route_u,
+            "raw": f"{route_u} CLSD {dir_u} OF {fix_u}",
+            "point_a": {"type": "invalid", "name": fix_u, "display_name": fix_u,
+                        "display_lat": None, "display_lon": None, "display_fir": ""},
+            "point_b": {"type": "invalid", "name": fix_u, "display_name": fix_u,
+                        "display_lat": None, "display_lon": None, "display_fir": ""},
+            "kz_style": "fix_not_on_route",
+            "fix_not_found": True,
+            "no_valid_direction": True,
+            "warning": f"Waypoint not found on {route_u}: {fix_u}",
+        }
 
     def ang_diff(a, b):
         return abs(((a - b) + 180) % 360 - 180)
@@ -1155,11 +1184,24 @@ def _build_kz_directional_route_closure(route: str, fix_name: str, dir_text: str
     left_meta = WPT_META[idxs[left_pos]]
     right_meta = WPT_META[idxs[right_pos]]
 
+    point_a = {"type": "waypoint", "name": left_meta["name"]}
+    point_b = {"type": "waypoint", "name": right_meta["name"]}
+
+    # Whichever endpoint is NOT the anchor fix is the one the tool CALCULATED
+    # by walking the airway. Stamp it so the UI highlights it (cyan). The anchor
+    # (typed verbatim in the NOTAM) is left normal.
+    if left_meta["name"].strip().upper() != fix_u:
+        point_a["calc"] = True
+        point_a["calc_info"] = f"{dir_u} OF {fix_u}"
+    if right_meta["name"].strip().upper() != fix_u:
+        point_b["calc"] = True
+        point_b["calc_info"] = f"{dir_u} OF {fix_u}"
+
     return {
         "route": route_u,
         "raw": f"{route_u} CLSD {dir_u} OF {fix_u}",
-        "point_a": {"type": "waypoint", "name": left_meta["name"]},
-        "point_b": {"type": "waypoint", "name": right_meta["name"]},
+        "point_a": point_a,
+        "point_b": point_b,
         "kz_style": "directional_built",
         "used_bridge_once": used_bridge_once,
     }

@@ -1498,6 +1498,14 @@ KZ_DIR_RE = re.compile(
     re.IGNORECASE
 )
 
+# Reversed word order: "Y309 N OF CANIT CLSD." (direction/fix BEFORE CLSD)
+KZ_DIR_REV_RE = re.compile(
+    r'\b(' + _KZ_ROUTE + r')\s+'
+    r'(NORTHWEST|NORTHEAST|SOUTHWEST|SOUTHEAST|NORTH|SOUTH|EAST|WEST|NW|NE|SW|SE|N|S|E|W)'
+    r'\s+OF\s+([A-Z0-9]{2,10})\s+CLSD\b',
+    re.IGNORECASE
+)
+
 KZ_ROUTE_ONLY_CLSD_RE = re.compile(
     r'\b([A-Z0-9/]+)\s*CLSD\b'
     r'(?!\s+(?:BTN|NORTHWEST|NORTHEAST|SOUTHWEST|SOUTHEAST|'
@@ -1764,7 +1772,6 @@ def extract_segments(notam_text: str) -> list[dict]:
 
     return segments
 
-
 def extract_route_only_segments(notam_text: str, fir_hint: str) -> list[dict]:
     """
     Extract NOTAM lines like:
@@ -1949,9 +1956,10 @@ def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
     #   Q89 CLSD S OF PRMUS
     #   Y494 CLSD SW OF VIRST
     for line in lines:
+        # Normal order: "Y309 CLSD N OF CANIT"
         for m in KZ_DIR_RE.finditer(line):
             route_group = m.group(1).strip().upper()
-            dir_txt = m.group(2).strip().upper()
+            dir_txt  = m.group(2).strip().upper()
             fix_name = m.group(3).strip().upper()
 
             for route in _split_route_group(route_group):
@@ -1971,6 +1979,28 @@ def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
                     "kz_style": "directional",
                 })
 
+        # Reversed order: "Y309 N OF CANIT CLSD"
+        for m in KZ_DIR_REV_RE.finditer(line):
+            route_group = m.group(1).strip().upper()
+            dir_txt  = m.group(2).strip().upper()
+            fix_name = m.group(3).strip().upper()
+
+            for route in _split_route_group(route_group):
+                key = ("DIR", route, dir_txt, fix_name)
+                if key in seen:
+                    continue
+                seen.add(key)
+
+                segments.append({
+                    "route": route,
+                    "raw": m.group(0),
+                    "point_a": {"type": "waypoint", "name": fix_name},
+                    "point_b": {"type": "waypoint", "name": fix_name},
+                    "directional_closure": True,
+                    "direction": dir_txt,
+                    "anchor_fix": fix_name,
+                    "kz_style": "directional",
+                })
     # 3) Full-route closures like:
     #   AR6/AR15 CLSD.
     #   AR12/Y436 CLSD.
@@ -2070,8 +2100,20 @@ def _build_kz_copy_output(segments):
         lines.append(f"{route} {a}-{b},") # e.g. "M596, POKEG-WATRS"  # keeps original NOTAM order of first hit
     return "\n".join(lines)
 
-def _build_kz_tiles(notam_text: str, closed_routes=None):
+def _extract_reroute_routes(notam_text: str) -> set:
+    """Airways that appear inside a RERTE ... string (positive detection)."""
+    rerte_routes = set()
+    # stop each RERTE chunk at the next RERTE, a newline, or "(NEXT FIX)"
+    for m in re.finditer(r'RERTE\b.*?(?=RERTE\b|\(NEXT FIX\)|\n|$)',
+                         notam_text.upper(), re.DOTALL):
+        for tok in re.split(r'[ /]+', m.group(0)):
+            if tok in WPT_BY_AIRWAY:
+                rerte_routes.add(tok)
+    return rerte_routes
+
+def _build_kz_tiles(notam_text: str, closed_routes=None, reroute_routes=None):
     closed_routes = {r.strip().upper() for r in (closed_routes or set())}
+    reroute_routes = {r.strip().upper() for r in (reroute_routes or set())}
     """Build airway visual tiles for KZ NOTAMs (right-side grid only)."""
     normalized = re.sub(r"[^A-Z0-9/ ]", " ", notam_text.upper())
     tokens = re.split(r"[ /]+", normalized)
@@ -2113,7 +2155,9 @@ def _build_kz_tiles(notam_text: str, closed_routes=None):
             "waypoints": waypoints,
             "count": len(waypoints),
             "extremes": extremes,
-            "is_reroute": awy not in closed_routes, # ✅ true = detour route, not closed
+            # RERTE only if it was positively named in a RERTE string AND not closed.
+            # An unparsed closure now shows NO badge (loud miss) instead of a fake RERTE.
+            "is_reroute": (awy in reroute_routes) and (awy not in closed_routes), # ✅ true = detour route, not closed
         })
     return tiles
 
@@ -2582,7 +2626,11 @@ def analyze():
         "valid_to":       valid_c.group(1) if valid_c else None,
         "segments":       segments,
         "total_segments": len(segments),
-        "tiles":          _build_kz_tiles(notam_text, {s.get("route","").strip().upper() for s in segments}) if is_kz else [],
+        "tiles":          _build_kz_tiles(
+                              notam_text,
+                              {s.get("route","").strip().upper() for s in segments},
+                              _extract_reroute_routes(notam_text),
+                          ) if is_kz else [],
         "copy_output":    _build_kz_copy_output(segments) if is_kz else "",
         "total_airways":  0,
     }

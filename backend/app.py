@@ -1506,10 +1506,19 @@ KZ_DIR_REV_RE = re.compile(
     re.IGNORECASE
 )
 
+# Dash closures: "L454 CLSD OKONO-JNFOX", "M201 CLSD VIRST-DRYED"
+# (US/KZWY style: endpoints joined by a dash, no "BTN ... AND").
+KZ_DASH_RE = re.compile(
+    r'\b(' + _KZ_ROUTE + r')\s+CLSD\s+'
+    r'([A-Z]{2,6})\s*-\s*([A-Z]{2,6})\b',
+    re.IGNORECASE
+)
+
 KZ_ROUTE_ONLY_CLSD_RE = re.compile(
     r'\b([A-Z0-9/]+)\s*CLSD\b'
     r'(?!\s+(?:BTN|NORTHWEST|NORTHEAST|SOUTHWEST|SOUTHEAST|'
-    r'NORTH|SOUTH|EAST|WEST|NW|NE|SW|SE|N|S|E|W)\b)',
+    r'NORTH|SOUTH|EAST|WEST|NW|NE|SW|SE|N|S|E|W)\b)'
+    r'(?!\s+[A-Z]{2,6}\s*-\s*[A-Z]{2,6}\b)',   # exclude dash closures
     re.IGNORECASE
 )
 
@@ -1566,6 +1575,10 @@ def normalize_notam_text_for_parsing(text: str) -> str:
         text,
         flags=re.IGNORECASE
     )
+
+    # Case 1E: US/KZWY NOTAMs spell out "CLOSED" instead of "CLSD".
+    # Normalize the standalone word so all KZ closure regexes match.
+    text = re.sub(r'\bCLOSED\b', 'CLSD', text, flags=re.IGNORECASE)
 
     return text
 
@@ -1898,6 +1911,27 @@ def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
                     "kz_style": "btn",
                 })
                 print("BTN MATCH:", m.group(0))
+
+    # 1c) Dash closures: "L454 CLSD OKONO-JNFOX", "M201 CLSD VIRST-DRYED"
+    #     US/KZWY style where endpoints are joined by a dash (no BTN...AND).
+    for line in lines:
+        for m in KZ_DASH_RE.finditer(line):
+            route_group = m.group(1).strip().upper()
+            raw_a = m.group(2).strip().upper()
+            raw_b = m.group(3).strip().upper()
+            for route in _split_route_group(route_group):
+                key = ("BTN", route, raw_a, raw_b)
+                if key in seen:
+                    continue
+                seen.add(key)
+                segments.append({
+                    "route": route,
+                    "raw": m.group(0),
+                    "point_a": {"type": "waypoint", "name": raw_a},
+                    "point_b": {"type": "waypoint", "name": raw_b},
+                    "kz_style": "dash",
+                })
+                print("DASH MATCH:", m.group(0))
     # 1b) BTN closures WITHOUT CLSD (list style). These are only valid when we
     #     are inside a "...TO BE CLSD:" section. A "RERTE" line ends the section.
     #     This prevents a stray "ROUTE BTN A AND B" under a reroute header from

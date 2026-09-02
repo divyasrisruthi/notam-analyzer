@@ -592,8 +592,10 @@ let activeSegmentIndex = null;
 // ── Map init ──────────────────────────────────────────────────────────────────
 function initMap() {
   map = L.map('map', {zoomControl:true}).setView([38, 104], 5);
-  L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
-    attribution: '© OSM © CARTO', subdomains: 'abcd', maxZoom: 18
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap contributors',
+    subdomains: 'abc',
+    maxZoom: 19
   }).addTo(map);
 }
 

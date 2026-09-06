@@ -1491,6 +1491,17 @@ KZ_BTN_NOCLSD_RE = re.compile(
     re.IGNORECASE
 )
 
+# Route token that also allows dash ranges (L375-435) and slash groups.
+_KZ_ROUTE_CHAIN = r'[A-Z]{1,3}\d{1,4}[A-Z]?(?:[/-][A-Z]{0,3}\d{1,4}[A-Z]?)*'
+
+# Chained BTN closures on one line, no per-item CLSD:
+#   "L375-435 BTN JAINS AND GALVN M203 BTN SNAGY AND WILYY M326 BTN ..."
+KZ_BTN_CHAIN_RE = re.compile(
+    r'\b(' + _KZ_ROUTE_CHAIN + r')\s+BTN\s+'
+    r'([A-Z]{2,6})\s+AND\s+([A-Z]{2,6})\b',
+    re.IGNORECASE
+)
+
 KZ_DIR_RE = re.compile(
     r'\b([A-Z0-9/]+)\s*CLSD\s+'
     r'(NORTHWEST|NORTHEAST|SOUTHWEST|SOUTHEAST|NORTH|SOUTH|EAST|WEST|NW|NE|SW|SE|N|S|E|W)'
@@ -1584,13 +1595,28 @@ def normalize_notam_text_for_parsing(text: str) -> str:
 
 def _split_route_group(route_text: str) -> list[str]:
     """
-    Example:
-        Y185/Y585 -> ["Y185", "Y585"]
-        L375/L435 -> ["L375", "L435"]
+    Y185/Y585  -> ["Y185", "Y585"]
+    L375/L435  -> ["L375", "L435"]
+    L375-435   -> ["L375", "L435"]   # dash range, 2nd inherits the L prefix
+    AR12/Y436  -> ["AR12", "Y436"]
     """
     if not route_text:
         return []
-    return [r.strip().upper() for r in route_text.split("/") if r.strip()]
+    parts = re.split(r'[/-]', route_text.upper())
+    out, prefix = [], ""
+    for p in parts:
+        p = p.strip()
+        if not p:
+            continue
+        m = re.match(r'^([A-Z]{1,3})(\d{1,4}[A-Z]?)$', p)
+        if m:                                   # full airway e.g. L375
+            prefix = m.group(1)
+            out.append(p)
+        elif re.match(r'^\d{1,4}[A-Z]?$', p) and prefix:
+            out.append(prefix + p)              # numeric-only e.g. 435 -> L435
+        else:
+            out.append(p)
+    return out
 
 
 def _is_kz_notam(notam_text: str) -> bool:
@@ -1932,6 +1958,27 @@ def extract_kz_segments(notam_text: str, fir_hint: str) -> list[dict]:
                     "kz_style": "dash",
                 })
                 print("DASH MATCH:", m.group(0))
+    # 1d) Chained BTN closures on a single flattened line WITHOUT per-item CLSD.
+    #     "...WILL BE CLOSED L375-435 BTN JAINS AND GALVN M203 BTN SNAGY AND
+    #       WILYY M326 BTN JAINS AND ALOBI M327 BTN SUMRS AND KANUX"
+    for line in lines:
+        for m in KZ_BTN_CHAIN_RE.finditer(line):
+            route_group = m.group(1).strip().upper()
+            raw_a = m.group(2).strip().upper()
+            raw_b = m.group(3).strip().upper()
+            for route in _split_route_group(route_group):
+                key = ("BTN", route, raw_a, raw_b)
+                if key in seen:
+                    continue
+                seen.add(key)
+                segments.append({
+                    "route": route,
+                    "raw": m.group(0),
+                    "point_a": {"type": "waypoint", "name": raw_a},
+                    "point_b": {"type": "waypoint", "name": raw_b},
+                    "kz_style": "btn_chain",
+                })
+                print("BTN CHAIN MATCH:", m.group(0))
     # 1b) BTN closures WITHOUT CLSD (list style). These are only valid when we
     #     are inside a "...TO BE CLSD:" section. A "RERTE" line ends the section.
     #     This prevents a stray "ROUTE BTN A AND B" under a reroute header from

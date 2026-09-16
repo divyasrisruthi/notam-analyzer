@@ -592,10 +592,17 @@ let activeSegmentIndex = null;
 // ── Map init ──────────────────────────────────────────────────────────────────
 function initMap() {
   map = L.map('map', {zoomControl:true}).setView([38, 104], 5);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© OpenStreetMap contributors',
-    subdomains: 'abc',
+
+  // Esri Dark Gray — free, no API key, dark theme
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '© Esri',
     maxZoom: 19
+  }).addTo(map);
+
+  // Labels layer (city/country names) on top
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+    attribution: '',
+    maxZoom: 16
   }).addTo(map);
 }
 

@@ -2127,7 +2127,8 @@ def security_headers(response):
         "default-src 'self'; "
         "script-src 'self' 'unsafe-inline' https://unpkg.com; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; "
-        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com https://*.tile.carto.com; "
+        "img-src 'self' data: https://*.tile.openstreetmap.org https://*.basemaps.cartocdn.com "
+        "https://*.tile.carto.com https://server.arcgisonline.com; "
         "connect-src 'self' https://unpkg.com; font-src 'self' https://fonts.gstatic.com;"
     )
     if request.path.startswith("/api/"):

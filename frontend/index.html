@@ -591,21 +591,20 @@ let activeSegmentIndex = null;
 
 // ── Map init ──────────────────────────────────────────────────────────────────
 function initMap() {
-  map = L.map('map', {zoomControl:true}).setView([38, 104], 5);
+  map = L.map('map', {zoomControl:true, maxZoom: 18}).setView([38, 104], 5);
 
-  // Esri Dark Gray — free, no API key, dark theme
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
     attribution: '© Esri',
-    maxZoom: 19
+    maxNativeZoom: 16,   // 👈 highest zoom Esri actually has
+    maxZoom: 18          // 👈 Leaflet upscales 16's tiles for 17-18
   }).addTo(map);
 
-  // Labels layer (city/country names) on top
   L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
     attribution: '',
-    maxZoom: 19
+    maxNativeZoom: 16,
+    maxZoom: 18
   }).addTo(map);
 }
-
 
 // ── Status ────────────────────────────────────────────────────────────────────
 function setStatus(msg, state='idle') {
@@ -928,7 +927,7 @@ if (copyAllText) {
   });
 
 
-  if (bounds.length) map.fitBounds(bounds, {padding:[80,80]});
+  if (bounds.length) map.fitBounds(bounds, {padding:[80,80], maxZoom: 9});
 }
 
 
@@ -1026,7 +1025,7 @@ function activateSegment(idx, card) {
   });
 
   if (pts.length) {
-    map.fitBounds(pts, {padding:[120,120]});
+    map.fitBounds(pts, {padding:[120,120], maxZoom: 9});
   }
 }
 

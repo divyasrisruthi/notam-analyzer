@@ -26,6 +26,19 @@ body{font-family:var(--sans);background:var(--navy);color:var(--text);height:100
 .tb-title{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--teal);letter-spacing:.08em}
 .tb-divider{width:1px;height:20px;background:var(--border)}
 .tb-sub{font-family:var(--mono);font-size:11px;color:var(--muted)}
+.airway-data-info{
+  font-family:var(--mono);
+  font-size:10px;
+  color:#9fe8d7;
+
+  border:1px solid rgba(0,212,170,.20);
+  background:rgba(0,212,170,.06);
+
+  padding:4px 10px;
+  border-radius:6px;
+
+  white-space:nowrap;
+}
 .tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .tb-status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted)}
 .tb-status-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);transition:all .3s}
@@ -481,7 +494,7 @@ display:none;
   <div class="tb-dot"></div>
   <div class="tb-title">NOTAM WAYPOINT ANALYZER</div>
   <div class="tb-divider"></div>
-  <div class="tb-sub">ATS Route Closure Tool</div>
+  <div class="tb-sub">ATS Route Closure Tool 🟢 AIRWAY DATA: </div>
   <div class="tb-right">
     <div class="tb-status">
       <div class="tb-status-dot" id="api-dot"></div>
@@ -621,13 +634,32 @@ function showToast(msg) {
 // ── Health check ──────────────────────────────────────────────────────────────
 async function checkHealth() {
   try {
-    const d = await fetch('/api/health', {signal: AbortSignal.timeout(4000)}).then(r=>r.json());
+    const d = await fetch(
+      '/api/health',
+      { signal: AbortSignal.timeout(4000) }
+    ).then(r => r.json());
+
     document.getElementById('api-dot').className = 'tb-status-dot ok';
     document.getElementById('api-label').textContent = 'API online';
-    document.getElementById('wpt-count').textContent = d.waypoints_loaded.toLocaleString() + ' wpts';
+
+    document.getElementById('wpt-count').textContent =
+      d.waypoints_loaded.toLocaleString() + ' wpts';
+
+    // ✅ Airway cycle banner
+    const cycle = d.data_cycle || '--';
+    const from = d.data_valid_from || '--';
+    const to = d.data_valid_to || '--';
+
+    document.getElementById('airway-data-info').textContent =
+      `🟢 AIRWAY DATA: ${cycle} | ${from} - ${to}`;
+
   } catch {
     document.getElementById('api-dot').className = 'tb-status-dot err';
     document.getElementById('api-label').textContent = 'API offline';
+
+    document.getElementById('airway-data-info').textContent =
+      '🔴 AIRWAY DATA: Unavailable';
+
     showToast('Cannot reach backend — make sure Flask is running on port 5000');
   }
 }

@@ -14,6 +14,7 @@ from pathlib import Path
 from functools import wraps
 from collections import defaultdict
 from math import radians, cos, sin, asin, sqrt, degrees, atan2, pi
+from datetime import datetime, date
 
 
 from flask import Flask, request, jsonify, send_from_directory, abort
@@ -71,14 +72,80 @@ WPT_AIRWAYS:  dict        = defaultdict(list)   # name  → [idx, ...]
 WPT_BY_AIRWAY: dict       = defaultdict(list)   # airway → [idx, ...] in CSV order
 _kdtree: cKDTree | None   = None
 
-
+# Metadata read from column H of waypoints.csv
+DATA_CYCLE = ""
+DATA_VALID_FROM = ""
+DATA_VALID_TO = ""
 def _to_xyz(lat_deg: float, lon_deg: float):
     lat, lon = radians(lat_deg), radians(lon_deg)
     return cos(lat) * cos(lon), cos(lat) * sin(lon), sin(lat)
 
+def _format_dataset_date(value) -> str:
+    """
+    Convert CSV/Excel metadata dates to UI format: 03 SEP 2026.
+    """
+    if value is None:
+        return ""
+
+    if isinstance(value, (datetime, date)):
+        return value.strftime("%d %b %Y").upper()
+
+    text = str(value).strip()
+
+    if not text:
+        return ""
+
+    accepted_formats = (
+        "%Y-%m-%d",     # 2026-09-03
+        "%d-%b-%Y",     # 03-Sep-2026
+        "%d %b %Y",     # 03 Sep 2026
+        "%d/%m/%Y",     # 03/09/2026
+        "%m/%d/%Y",     # 09/03/2026
+        "%Y/%m/%d",     # 2026/09/03
+    )
+
+    for date_format in accepted_formats:
+        try:
+            parsed = datetime.strptime(text, date_format)
+            return parsed.strftime("%d %b %Y").upper()
+        except ValueError:
+            continue
+
+    log.warning("Unrecognized dataset date format: %r", value)
+    return text.upper()
+
+
+def _read_dataset_metadata(rows) -> tuple[str, str, str]:
+    """
+    Read dataset metadata from column H:
+
+        H1 = cycle
+        H2 = valid-from date
+        H3 = valid-to date
+    """
+    cycle = ""
+    valid_from = ""
+    valid_to = ""
+
+    try:
+        if len(rows) >= 1 and len(rows[0]) >= 8:
+            cycle = str(rows[0][7]).strip()
+
+        if len(rows) >= 2 and len(rows[1]) >= 8:
+            valid_from = _format_dataset_date(rows[1][7])
+
+        if len(rows) >= 3 and len(rows[2]) >= 8:
+            valid_to = _format_dataset_date(rows[2][7])
+
+    except Exception:
+        log.exception("Could not read dataset metadata from column H")
+
+    return cycle, valid_from, valid_to
 
 def load_waypoints(csv_path: str) -> int:
-    global WPT_NAMES, WPT_COORDS, WPT_META, WPT_AIRWAYS, WPT_BY_AIRWAY, _kdtree
+    global WPT_NAMES, WPT_COORDS, WPT_META
+    global WPT_AIRWAYS, WPT_BY_AIRWAY, _kdtree
+    global DATA_CYCLE, DATA_VALID_FROM, DATA_VALID_TO
 
     path = Path(csv_path)
     if not path.exists():
@@ -98,6 +165,15 @@ def load_waypoints(csv_path: str) -> int:
 
     header = [c.strip().upper() for c in rows[0]]
     log.info("CSV header: %s", header)
+
+    new_cycle, new_valid_from, new_valid_to = _read_dataset_metadata(rows)
+
+    log.info(
+        "Dataset metadata: cycle=%s, valid_from=%s, valid_to=%s",
+        new_cycle or "unknown",
+        new_valid_from or "unknown",
+        new_valid_to or "unknown",
+    )
 
     names, coords, meta = [], [], []
     skipped = 0
@@ -264,6 +340,12 @@ def load_waypoints(csv_path: str) -> int:
             WPT_BY_AIRWAY[airway].append(i)
 
     _kdtree = new_tree
+
+    # Update cycle metadata only after the new dataset loads successfully.
+    # If a broken file is supplied, the previous working metadata remains.
+    DATA_CYCLE = new_cycle
+    DATA_VALID_FROM = new_valid_from
+    DATA_VALID_TO = new_valid_to
 
     log.info(
         "✅ Loaded %d waypoints | unique=%d | airways=%d",
@@ -2146,11 +2228,17 @@ def index():
 @app.route("/api/health")
 def health():
     healthy = _kdtree is not None and len(WPT_NAMES) > 0
+
     return jsonify({
         "status": "ok" if healthy else "degraded",
         "waypoints_loaded": len(WPT_NAMES),
         "kdtree_ready": _kdtree is not None,
         "airways_loaded": len(WPT_BY_AIRWAY),
+
+        # Dataset information for the top navigation
+        "data_cycle": DATA_CYCLE,
+        "data_valid_from": DATA_VALID_FROM,
+        "data_valid_to": DATA_VALID_TO,
     }), 200 if healthy else 503
 
 def _build_kz_copy_output(segments):

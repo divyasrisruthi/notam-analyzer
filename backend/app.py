@@ -96,12 +96,13 @@ def _format_dataset_date(value) -> str:
         return ""
 
     accepted_formats = (
+        "%d%b%Y", # 03SEP2026
         "%Y-%m-%d",     # 2026-09-03
         "%d-%b-%Y",     # 03-Sep-2026
         "%d %b %Y",     # 03 Sep 2026
-        "%d/%m/%Y",     # 03/09/2026
-        "%m/%d/%Y",     # 09/03/2026
+        "%m/%d/%Y",     # 9/3/2026  -> Excel US export (checked first)
         "%Y/%m/%d",     # 2026/09/03
+        "%d/%m/%Y",     # 03/09/2026 (fallback)
     )
 
     for date_format in accepted_formats:

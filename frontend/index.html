@@ -494,7 +494,12 @@ display:none;
   <div class="tb-dot"></div>
   <div class="tb-title">NOTAM WAYPOINT ANALYZER</div>
   <div class="tb-divider"></div>
-  <div class="tb-sub">ATS Route Closure Tool 🟢 AIRWAY DATA: </div>
+  <div class="tb-sub">ATS Route Closure Tool</div>
+
+  <div class="airway-data-info" id="airway-data-info">
+    🟢 AIRWAY DATA: Loading...
+  </div>
+
   <div class="tb-right">
     <div class="tb-status">
       <div class="tb-status-dot" id="api-dot"></div>
@@ -633,37 +638,44 @@ function showToast(msg) {
 
 // ── Health check ──────────────────────────────────────────────────────────────
 async function checkHealth() {
+  const apiDot = document.getElementById('api-dot');
+  const apiLabel = document.getElementById('api-label');
+  const wptCount = document.getElementById('wpt-count');
+  const airwayInfo = document.getElementById('airway-data-info');
+
   try {
-    const d = await fetch(
-      '/api/health',
-      { signal: AbortSignal.timeout(4000) }
-    ).then(r => r.json());
+    const resp = await fetch('/api/health', {
+      signal: AbortSignal.timeout(4000),
+      cache: 'no-store'
+    });
 
-    document.getElementById('api-dot').className = 'tb-status-dot ok';
-    document.getElementById('api-label').textContent = 'API online';
+    const d = await resp.json();
 
-    document.getElementById('wpt-count').textContent =
-      d.waypoints_loaded.toLocaleString() + ' wpts';
+    apiDot.className = 'tb-status-dot ok';
+    apiLabel.textContent = 'API online';
 
-    // ✅ Airway cycle banner
+    const loaded = Number(d.waypoints_loaded || 0);
+    wptCount.textContent = loaded.toLocaleString() + ' wpts';
+
     const cycle = d.data_cycle || '--';
-    const from = d.data_valid_from || '--';
-    const to = d.data_valid_to || '--';
+    const from  = d.data_valid_from || '--';
+    const to    = d.data_valid_to || '--';
 
-    document.getElementById('airway-data-info').textContent =
-      `🟢 AIRWAY DATA: ${cycle} | ${from} - ${to}`;
+    if (airwayInfo) {
+      airwayInfo.textContent = `🟢 AIRWAY DATA: ${cycle} | ${from} - ${to}`;
+    }
 
-  } catch {
-    document.getElementById('api-dot').className = 'tb-status-dot err';
-    document.getElementById('api-label').textContent = 'API offline';
+  } catch (err) {
+    console.error('Health check failed:', err);
 
-    document.getElementById('airway-data-info').textContent =
-      '🔴 AIRWAY DATA: Unavailable';
+    apiDot.className = 'tb-status-dot err';
+    apiLabel.textContent = 'API offline';
 
-    showToast('Cannot reach backend — make sure Flask is running on port 5000');
+    if (airwayInfo) {
+      airwayInfo.textContent = '🔴 AIRWAY DATA: Unavailable';
+    }
   }
 }
-
 
 // ── Analyze ───────────────────────────────────────────────────────────────────
 async function analyzeNotam() {

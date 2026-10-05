@@ -1588,6 +1588,7 @@ KZ_BTN_CHAIN_RE = re.compile(
 KZ_DIR_RE = re.compile(
     r'\b([A-Z0-9/]+)\s*CLSD\s+'
     r'(NORTHWEST|NORTHEAST|SOUTHWEST|SOUTHEAST|NORTH|SOUTH|EAST|WEST|NW|NE|SW|SE|N|S|E|W)'
+    r'(?:\s+OF)?\s+' # <-- OF now optional
     r'\s+OF\s+([A-Z0-9]{2,10})\b',
     re.IGNORECASE
 )
@@ -1596,6 +1597,7 @@ KZ_DIR_RE = re.compile(
 KZ_DIR_REV_RE = re.compile(
     r'\b(' + _KZ_ROUTE + r')\s+'
     r'(NORTHWEST|NORTHEAST|SOUTHWEST|SOUTHEAST|NORTH|SOUTH|EAST|WEST|NW|NE|SW|SE|N|S|E|W)'
+    r'(?:\s+OF)?\s+' # <-- OF now optional
     r'\s+OF\s+([A-Z0-9]{2,10})\s+CLSD\b',
     re.IGNORECASE
 )

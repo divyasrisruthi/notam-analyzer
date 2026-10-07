@@ -26,19 +26,6 @@ body{font-family:var(--sans);background:var(--navy);color:var(--text);height:100
 .tb-title{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--teal);letter-spacing:.08em}
 .tb-divider{width:1px;height:20px;background:var(--border)}
 .tb-sub{font-family:var(--mono);font-size:11px;color:var(--muted)}
-.airway-data-info{
-  font-family:var(--mono);
-  font-size:10px;
-  color:#9fe8d7;
-
-  border:1px solid rgba(0,212,170,.20);
-  background:rgba(0,212,170,.06);
-
-  padding:4px 10px;
-  border-radius:6px;
-
-  white-space:nowrap;
-}
 .tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .tb-status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted)}
 .tb-status-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);transition:all .3s}
@@ -374,62 +361,219 @@ display:none;
   transform:translateY(-1px);
 }
 
-.kz-grid{
-  display:grid;
-  grid-template-columns:repeat(auto-fit,minmax(320px,1fr));
-  gap:14px;
+/* ── KZ Airway Accordion (modern, collapsed-by-default, expand for detail) ── */
+.kz-toolbar{
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  margin-bottom:12px;padding:10px 14px;
+  background:linear-gradient(180deg,#111827 0%,#0d1420 100%);
+  border:1px solid #263449;border-radius:12px;
+  box-shadow:0 4px 16px rgba(0,0,0,.2);
 }
-.kz-tile{
-  position:relative;
-  background:linear-gradient(180deg,#111827 0%,#0f172a 100%);
-  border:1px solid #334155;border-radius:14px;
-  padding:12px;height:320px;display:flex;gap:12px;overflow:hidden;
-  box-shadow:0 6px 20px rgba(0,0,0,.25);
+.kz-stats{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.kz-stat-chip{
+  display:flex;align-items:center;gap:6px;
+  padding:5px 10px;border-radius:8px;
+  background:#0f172a;border:1px solid #263449;
+  font-family:var(--mono);font-size:11px;font-weight:700;color:#cbd5e1;
+  white-space:nowrap;
 }
-.kz-tile.reroute{
-  border:1px solid var(--amber);
-  box-shadow:0 6px 20px rgba(0,0,0,.25), inset 0 0 0 1px rgba(245,166,35,.35);
-  background:linear-gradient(180deg,#1b1608 0%,#141007 100%);
+.kz-stat-chip .n{font-size:13px}
+.kz-stat-chip.total .n{color:var(--teal)}
+.kz-stat-chip.closed .n{color:#ef4444}
+.kz-stat-chip.reroute .n{color:var(--amber)}
+.kz-search-wrap{flex:1;min-width:160px;max-width:280px}
+.kz-search{
+  width:100%;padding:7px 12px;border-radius:8px;
+  border:1px solid #263449;background:#0b1220;color:#e5e7eb;
+  font-family:var(--mono);font-size:12px;outline:none;transition:border-color .15s;
 }
-/* reroute isn't a closure -> show amber line, not red */
-.kz-tile.reroute .viz-vline,
-.kz-tile.reroute .viz-hline{
-  background:var(--amber);
-  box-shadow:0 0 10px rgba(245,166,35,.55);
+.kz-search:focus{border-color:var(--teal)}
+.kz-search::placeholder{color:#5a7290}
+.kz-viz-toggle{
+  display:flex;align-items:center;gap:8px;margin-left:auto;
 }
-.reroute-badge{
-  position:absolute;
-  top:8px;right:8px;z-index:2;
+.kz-viz-toggle-label{
+  font-family:var(--mono);font-size:10px;color:#94a3b8;text-transform:uppercase;
+  letter-spacing:.08em;margin-right:2px;
+}
+.viz-mode-btn{
+  padding:5px 12px;border-radius:6px;border:1px solid #334155;background:transparent;
+  color:#94a3b8;font-family:var(--mono);font-size:11px;font-weight:600;cursor:pointer;
+  transition:all .15s;
+}
+.viz-mode-btn:hover{border-color:var(--teal);color:var(--teal)}
+.viz-mode-btn.active{background:rgba(0,212,170,.14);border-color:var(--teal);color:var(--teal)}
+.kz-viz-legend{
+  display:flex;align-items:center;gap:14px;width:100%;
+  padding:2px 2px 0;
+}
+.kz-viz-legend-item{
   display:flex;align-items:center;gap:5px;
-  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;
-  padding:3px 7px;border-radius:6px;
-  background:rgba(245,166,35,.15);
-  border:1px solid var(--amber);
-  color:var(--amber);
+  font-family:var(--mono);font-size:10px;color:#94a3b8;white-space:nowrap;
 }
-.reroute-badge .dot{
-  width:8px;height:8px;border-radius:50%;
-  background:var(--amber);box-shadow:0 0 6px var(--amber);
+.kz-viz-legend-item i{
+  display:inline-block;width:14px;height:3px;border-radius:2px;flex-shrink:0;
 }
-.kz-text{
-  flex:0 0 62%;min-width:0;overflow-y:auto;
-  padding-right:8px;border-right:1px solid #334155;
+
+.awy-list{display:flex;flex-direction:column;gap:8px}
+
+.awy-row{
+  background:linear-gradient(180deg,#111827 0%,#0f172a 100%);
+  border:1px solid #263449;border-radius:12px;overflow:hidden;
+  transition:border-color .15s,box-shadow .15s;
 }
-.kz-viz{
-  flex:0 0 38%;display:flex;align-items:center;
-  justify-content:center;overflow:hidden;
+.awy-row:hover{border-color:#3a5170}
+.awy-row.expanded{
+  border-color:var(--teal);
+  box-shadow:0 8px 24px rgba(0,0,0,.3), 0 0 0 1px rgba(0,212,170,.15);
 }
-.kz-title{
-  color:#22c55e;font-weight:800;font-size:18px;margin-bottom:8px;
-  letter-spacing:.4px;position:sticky;top:0;background:#111827;
-  padding-bottom:6px;font-family:var(--mono);
+.awy-row.reroute.expanded{border-color:var(--amber);box-shadow:0 8px 24px rgba(0,0,0,.3), 0 0 0 1px rgba(245,166,35,.18)}
+
+.awy-row-head{
+  width:100%;display:flex;align-items:center;gap:12px;
+  padding:11px 14px;background:transparent;border:none;cursor:pointer;
+  text-align:left;font-family:inherit;color:inherit;
 }
-.kz-wp{
-  font-size:13px;line-height:1.35;color:#e5e7eb;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  padding:1px 0;font-family:var(--mono);
+.awy-row-dot{
+  width:9px;height:9px;border-radius:50%;flex-shrink:0;
+  background:#ef4444;box-shadow:0 0 8px rgba(239,68,68,.7);
 }
-.kz-wp .fir{color:#94a3b8;font-size:11px}
+.awy-row.reroute .awy-row-dot{background:var(--amber);box-shadow:0 0 8px rgba(245,166,35,.7)}
+.awy-row.no-range .awy-row-dot{background:#64748b;box-shadow:none}
+
+.awy-row-code{
+  font-family:var(--mono);font-weight:800;font-size:14px;color:#22c55e;
+  flex-shrink:0;min-width:52px;
+}
+.awy-row.reroute .awy-row-code{color:var(--amber)}
+
+.awy-badge{
+  flex-shrink:0;font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.08em;
+  padding:3px 7px;border-radius:5px;
+  background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.5);color:#f87171;
+}
+.awy-row.reroute .awy-badge{
+  background:rgba(245,166,35,.14);border:1px solid rgba(245,166,35,.5);color:var(--amber);
+}
+
+.awy-row-range{
+  flex:1;min-width:0;font-family:var(--mono);font-size:12px;color:#cbd5e1;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.awy-row-range b{color:#f8fafc}
+.awy-row-range .arrow{color:#5a7290;margin:0 5px}
+
+.awy-row-mini{flex-shrink:0;width:64px;height:26px;opacity:.9}
+.awy-spark{width:100%;height:100%;display:block}
+
+.awy-row-meta{
+  flex-shrink:0;font-family:var(--mono);font-size:10px;color:#7891ac;
+  min-width:78px;text-align:right;
+}
+
+.awy-row-chevron{
+  flex-shrink:0;width:20px;height:20px;display:flex;align-items:center;justify-content:center;
+  color:#5a7290;transition:transform .22s ease;font-size:11px;
+}
+.awy-row.expanded .awy-row-chevron{transform:rotate(180deg);color:var(--teal)}
+.awy-row.reroute.expanded .awy-row-chevron{color:var(--amber)}
+
+.awy-row-body{
+  display:grid;grid-template-rows:0fr;
+  transition:grid-template-rows .28s ease;
+}
+.awy-row.expanded .awy-row-body{grid-template-rows:1fr}
+.awy-row-body-inner{overflow:hidden;min-height:0}
+
+.awy-detail{
+  padding:4px 16px 16px;border-top:1px solid #1e293b;
+}
+.awy-detail-top{
+  display:flex;flex-wrap:wrap;gap:10px;margin:12px 0;
+}
+.awy-detail-stat{
+  padding:6px 12px;border-radius:8px;background:#0b1220;border:1px solid #263449;
+  min-width:120px;
+}
+.awy-detail-stat .label{
+  display:block;font-family:var(--mono);font-size:9px;color:#7891ac;
+  text-transform:uppercase;letter-spacing:.08em;margin-bottom:3px;
+}
+.awy-detail-stat .value{
+  display:block;font-family:var(--mono);font-size:13px;font-weight:700;color:#f8fafc;
+}
+.awy-fit-toggle{
+  display:flex;align-items:center;gap:6px;margin-left:auto;align-self:center;
+}
+.awy-fit-btn{
+  padding:6px 11px;border-radius:8px;border:1px solid #263449;background:#0b1220;
+  color:#7891ac;font-family:var(--mono);font-size:10px;font-weight:700;cursor:pointer;
+  white-space:nowrap;transition:all .15s;
+}
+.awy-fit-btn:hover{border-color:var(--teal);color:var(--teal)}
+.awy-fit-btn.active{background:rgba(0,212,170,.14);border-color:var(--teal);color:var(--teal)}
+.awy-row.reroute .awy-fit-btn.active{background:rgba(245,166,35,.14);border-color:var(--amber);color:var(--amber)}
+.awy-detail-viz{
+  position:relative;
+  width:100%;min-height:260px;border-radius:10px;overflow:hidden;
+  background:#0b1220;border:1px solid #1e293b;margin-bottom:14px;
+}
+.awy-detail-viz .viz-svg{width:100%;height:260px;display:block}
+.awy-detail-viz .viz-map{width:100%;height:260px;min-height:260px}
+.awy-zoom-hint{
+  position:absolute;bottom:8px;left:8px;z-index:640;
+  background:rgba(15,23,42,.9);border:1px solid #334155;border-radius:6px;
+  padding:4px 9px;font-family:var(--mono);font-size:9.5px;color:#94a3b8;
+  pointer-events:none;transition:opacity .2s;
+}
+.viz-map-inner.labels-visible ~ .awy-zoom-hint{opacity:0}
+.awy-detail-empty{
+  padding:30px;text-align:center;color:#7891ac;font-family:var(--mono);font-size:12px;
+}
+.awy-detail-wplist{display:flex;flex-wrap:wrap;gap:6px}
+.awy-wp-chip{
+  font-family:var(--mono);font-size:11px;padding:4px 9px;border-radius:999px;
+  background:#0f172a;border:1px solid #263449;color:#94a3b8;
+}
+.awy-wp-chip i{font-style:normal;color:#5a7290;margin-left:4px;font-size:9.5px}
+.awy-wp-chip.closed{
+  background:rgba(239,68,68,.12);border-color:rgba(239,68,68,.5);color:#f8fafc;font-weight:700;
+}
+.awy-wp-chip.closed i{color:#f87171}
+.awy-wp-chip.reroute{
+  background:rgba(245,166,35,.12);border-color:rgba(245,166,35,.5);color:#f8fafc;font-weight:700;
+}
+.awy-wp-chip.reroute i{color:var(--amber)}
+
+.viz-map{width:100%;height:100%;min-height:150px;border-radius:8px;overflow:hidden;background:#0b1220}
+.leaflet-container.viz-map-inner{background:#0b1220}
+.kz-map-tooltip{
+  background:#1e293b !important;border:1px solid #475569 !important;color:#f8fafc !important;
+  font-family:var(--mono) !important;font-size:10px !important;font-weight:700 !important;
+  padding:2px 6px !important;border-radius:999px !important;box-shadow:none !important;
+  pointer-events:none;
+}
+.kz-map-tooltip::before{display:none !important}
+/* Endpoint labels (the actual closed/reroute stretch) always show, styled
+   with a stronger border so they read as the primary/important labels. */
+.kz-map-tooltip.end{
+  border-color:#94a3b8 !important;font-weight:800 !important;z-index:650;
+}
+/* Every OTHER waypoint on the airway also gets a real label — it's just
+   hidden until the map is zoomed in enough to read it without turning into
+   label soup. Revealed live by the zoomend handler in mountKzMiniMap(). */
+.kz-map-tooltip.bg-label{
+  opacity:0 !important;transition:opacity .15s;pointer-events:none;
+  background:#0f172a !important;color:#cbd5e1 !important;font-weight:600 !important;
+  border-color:#334155 !important;
+}
+.viz-map-inner.labels-visible .kz-map-tooltip.bg-label{
+  opacity:1 !important;
+}
+.viz-map-inner .leaflet-control-zoom a{
+  background:#111827!important;color:#22c55e!important;border-color:#334155!important;font-weight:700;
+}
+.viz-map-inner .leaflet-control-zoom a:hover{background:#1e293b!important}
 
 /* Airways Found list */
 .airway-list{
@@ -441,36 +585,15 @@ display:none;
 .airway-list .aw{color:#d1fae5;padding:1px 0}
 .airway-list::-webkit-scrollbar{width:4px}
 .airway-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
-.kz-text::-webkit-scrollbar{width:6px}
-.kz-text::-webkit-scrollbar-thumb{background:#475569;border-radius:10px}
 
-/* Vertical viz */
-.viz-v{display:flex;flex-direction:column;align-items:center;gap:8px}
-.viz-label{
-  max-width:100%;font-size:11px;color:#f8fafc;font-weight:700;
-  background:#1e293b;border:1px solid #475569;border-radius:999px;
-  padding:4px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  font-family:var(--mono);
+/* Real geographic path viz (lat/lon polyline) */
+.viz-svg{width:100%;height:100%;max-height:180px;overflow:hidden}
+.viz-svg-label{
+  font-family:var(--mono);font-size:9px;font-weight:700;fill:#f8fafc;
+  paint-order:stroke;stroke:#0f172a;stroke-width:3px;stroke-linejoin:round;
 }
-.viz-vline{
-  width:4px;height:115px;background:#ef4444;border-radius:999px;
-  box-shadow:0 0 10px rgba(239,68,68,.55);
-}
-
-/* Horizontal viz */
-.viz-h{width:100%;text-align:center}
-.viz-hlabels{
-  display:flex;justify-content:space-between;gap:8px;margin-bottom:12px;
-}
-.viz-hlabels span{
-  max-width:48%;font-size:11px;color:#f8fafc;font-weight:700;
-  background:#1e293b;border:1px solid #475569;border-radius:999px;
-  padding:4px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
-  font-family:var(--mono);
-}
-.viz-hline{
-  height:4px;width:86%;background:#ef4444;border-radius:999px;
-  box-shadow:0 0 10px rgba(239,68,68,.55);margin:0 auto;
+.viz-svg-label.bg{
+  font-size:7.5px;font-weight:600;fill:#94a3b8;stroke-width:2.5px;
 }
 
 .kz-empty{
@@ -495,11 +618,6 @@ display:none;
   <div class="tb-title">NOTAM WAYPOINT ANALYZER</div>
   <div class="tb-divider"></div>
   <div class="tb-sub">ATS Route Closure Tool</div>
-
-  <div class="airway-data-info" id="airway-data-info">
-    🟢 AIRWAY DATA: Loading...
-  </div>
-
   <div class="tb-right">
     <div class="tb-status">
       <div class="tb-status-dot" id="api-dot"></div>
@@ -574,8 +692,24 @@ display:none;
 
     <div id="map"></div>
     <div class="kz-view" id="kz-view">
+      <div class="kz-toolbar" id="kz-toolbar">
+        <div class="kz-stats" id="kz-stats"></div>
+        <div class="kz-search-wrap">
+          <input type="text" class="kz-search" id="kz-search" placeholder="Filter airway… (AR19, Y291)" oninput="filterKzList()" autocomplete="off"/>
+        </div>
+        <div class="kz-viz-toggle">
+          <span class="kz-viz-toggle-label">Visual:</span>
+          <button class="viz-mode-btn active" data-mode="svg" onclick="setKzVizMode('svg')">Diagram</button>
+          <button class="viz-mode-btn" data-mode="map" onclick="setKzVizMode('map')">Live Map</button>
+        </div>
+        <div class="kz-viz-legend">
+          <span class="kz-viz-legend-item"><i style="background:#3060d0"></i>Full airway</span>
+          <span class="kz-viz-legend-item"><i style="background:#ef4444"></i>Closed segment</span>
+          <span class="kz-viz-legend-item"><i style="background:#f5a623"></i>Reroute</span>
+        </div>
+      </div>
       <div class="kz-empty" id="kz-empty">Paste a KZ/China NOTAM and click Analyze.</div>
-      <div class="kz-grid" id="kz-grid"></div>
+      <div class="awy-list" id="kz-grid"></div>
     </div>
     <div class="legend">
       <div class="leg-item"><div class="leg-dot" style="background:#1a7a4a"></div> Named waypoint</div>
@@ -638,44 +772,18 @@ function showToast(msg) {
 
 // ── Health check ──────────────────────────────────────────────────────────────
 async function checkHealth() {
-  const apiDot = document.getElementById('api-dot');
-  const apiLabel = document.getElementById('api-label');
-  const wptCount = document.getElementById('wpt-count');
-  const airwayInfo = document.getElementById('airway-data-info');
-
   try {
-    const resp = await fetch('/api/health', {
-      signal: AbortSignal.timeout(4000),
-      cache: 'no-store'
-    });
-
-    const d = await resp.json();
-
-    apiDot.className = 'tb-status-dot ok';
-    apiLabel.textContent = 'API online';
-
-    const loaded = Number(d.waypoints_loaded || 0);
-    wptCount.textContent = loaded.toLocaleString() + ' wpts';
-
-    const cycle = d.data_cycle || '--';
-    const from  = d.data_valid_from || '--';
-    const to    = d.data_valid_to || '--';
-
-    if (airwayInfo) {
-      airwayInfo.textContent = `🟢 AIRWAY DATA: ${cycle} | ${from} - ${to}`;
-    }
-
-  } catch (err) {
-    console.error('Health check failed:', err);
-
-    apiDot.className = 'tb-status-dot err';
-    apiLabel.textContent = 'API offline';
-
-    if (airwayInfo) {
-      airwayInfo.textContent = '🔴 AIRWAY DATA: Unavailable';
-    }
+    const d = await fetch('/api/health', {signal: AbortSignal.timeout(4000)}).then(r=>r.json());
+    document.getElementById('api-dot').className = 'tb-status-dot ok';
+    document.getElementById('api-label').textContent = 'API online';
+    document.getElementById('wpt-count').textContent = d.waypoints_loaded.toLocaleString() + ' wpts';
+  } catch {
+    document.getElementById('api-dot').className = 'tb-status-dot err';
+    document.getElementById('api-label').textContent = 'API offline';
+    showToast('Cannot reach backend — make sure Flask is running on port 5000');
   }
 }
+
 
 // ── Analyze ───────────────────────────────────────────────────────────────────
 async function analyzeNotam() {
@@ -1175,6 +1283,13 @@ function clearAll() {
   document.getElementById('copy-all-text').textContent='';
   const kzGrid = document.getElementById('kz-grid');
   if (kzGrid) kzGrid.innerHTML = '';
+  const kzStats = document.getElementById('kz-stats');
+  if (kzStats) kzStats.innerHTML = '';
+  const kzSearch = document.getElementById('kz-search');
+  if (kzSearch) kzSearch.value = '';
+  expandedAwyIdx = new Set();
+  awyFitMode = {};
+  _teardownKzTileMaps();
   const awSec2 = document.getElementById('kz-airways-section');
   if (awSec2) awSec2.style.display = 'none';
   const kzEmpty = document.getElementById('kz-empty');
@@ -1363,8 +1478,395 @@ function toggleSegmentPanel() {
 
 })();
 
-// ── Render KZ tile results ───────────────────────────────────────────────
+// ── Airway path visualization (SVG diagram) ──────────────────────────────
+// Project real lat/lon waypoints into an SVG polyline so the airway shows
+// its true shape (bends, diagonals, dog-legs). Draws the FULL airway as a
+// background line and highlights only the actually-closed sub-range,
+// mirroring the main map's "Airway (background)" vs "Closed segment" legend.
+//
+// By default the view is TIGHTLY fitted to just the closed stretch (plus a
+// little breathing room) so it reads clearly instead of being a tiny sliver
+// lost in a huge, mostly-irrelevant airway. opts.fitMode:'full' zooms back
+// out to the whole airway (toggle button in the detail panel).
+function buildAirwayPathSvg(path, isReroute, uid, closedRange, opts) {
+  opts = opts || {};
+  const W = opts.width || 220, H = opts.height || 200, PAD = opts.pad || 30;
+  const fitMode = opts.fitMode || 'closed';
+  const glowId = `awyGlow-${uid}`;
+
+  const lo = closedRange ? closedRange.start_index : 0;
+  const hi = closedRange ? closedRange.end_index : path.length - 1;
+  const hasSubRange = closedRange && (lo > 0 || hi < path.length - 1);
+  const fitPath = (fitMode === 'full' || !hasSubRange) ? path : path.slice(lo, hi + 1);
+
+  const fitLats = fitPath.map(p => p.lat), fitLons = fitPath.map(p => p.lon);
+  let minLat = Math.min(...fitLats), maxLat = Math.max(...fitLats);
+  let minLon = Math.min(...fitLons), maxLon = Math.max(...fitLons);
+
+  // headroom around the fitted stretch — generous in "closed" mode so a
+  // hint of the surrounding airway peeks in at the edges, minimal in "full"
+  const marginFactor = fitMode === 'full' ? 0.08 : 0.4;
+  const minMarginDeg = fitMode === 'full' ? 0 : 0.25;
+  const marginLat = Math.max((maxLat - minLat) * marginFactor, minMarginDeg);
+  const marginLon = Math.max((maxLon - minLon) * marginFactor, minMarginDeg);
+  minLat -= marginLat; maxLat += marginLat;
+  minLon -= marginLon; maxLon += marginLon;
+
+  const midLatRad = ((minLat + maxLat) / 2) * Math.PI / 180;
+  // compress longitude by cos(latitude) so shape/angles are geographically true,
+  // not just "min-max stretched to fill the box"
+  const lonScale = Math.max(Math.cos(midLatRad), 0.15);
+
+  const rawSpanLat = maxLat - minLat;
+  const rawSpanLon = (maxLon - minLon) * lonScale;
+  // guard against a perfectly straight N-S or E-W airway (zero span on one axis)
+  // — used only to size the scale, never to shift the actual data
+  const EPS = Math.max(rawSpanLat, rawSpanLon, 0.01) * 0.08;
+  const effSpanLat = Math.max(rawSpanLat, EPS);
+  const effSpanLon = Math.max(rawSpanLon, EPS);
+
+  const scale = Math.min((W - 2 * PAD) / effSpanLon, (H - 2 * PAD) / effSpanLat);
+  // center the actual data footprint (not the padded/clamped box) in the viewBox
+  const offX = (W - rawSpanLon * scale) / 2;
+  const offY = (H - rawSpanLat * scale) / 2;
+
+  const project = (lat, lon) => {
+    const x = offX + (lon - minLon) * lonScale * scale;
+    const y = offY + (maxLat - lat) * scale; // flip: north = up
+    return [x, y];
+  };
+
+  const pts = path.map(p => project(p.lat, p.lon));
+  const pointsAttr = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const color = isReroute ? '#f5a623' : '#ef4444';
+  const bgColor = '#3060d0'; // same blue as the main China map's "Airway (background)"
+
+  const closedPts = pts.slice(lo, hi + 1);
+  const closedPointsAttr = closedPts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const [sx, sy] = pts[lo];
+  const [ex, ey] = pts[hi];
+
+  // background line for the FULL airway (only drawn when there's actually
+  // more airway beyond the closed stretch — otherwise it'd just overdraw the highlight)
+  const bgLine = hasSubRange
+    ? `<polyline points="${pointsAttr}" fill="none" stroke="${bgColor}" stroke-width="2" opacity="0.55" stroke-linecap="round" stroke-linejoin="round"/>`
+    : '';
+
+  // small dots for every waypoint on the airway (context, hoverable), bigger colored dots for the closed endpoints
+  const dots = pts.map(([x, y], i) => {
+    const isClosedEnd = i === lo || i === hi;
+    const r = isClosedEnd ? 5 : 2.6;
+    const fill = isClosedEnd ? color : bgColor;
+    const op = isClosedEnd ? 1 : 0.8;
+    return `<circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${r}" fill="${fill}" opacity="${op}"><title>${esc(path[i].name)}</title></circle>`;
+  }).join('');
+
+  // 🏷️ Background waypoint names: only drawn when the view is tightly
+  // zoomed to the closed stretch (fitMode 'closed') — there's real room to
+  // read them there. In 'full airway' mode there can be 20-30+ points, so we
+  // keep only the closed endpoints labeled (rest still available on hover
+  // via <title>) to avoid turning the diagram into label soup.
+  const bgLabels = fitMode === 'full' ? '' : pts.map(([x, y], i) => {
+    if (i === lo || i === hi) return ''; // endpoints get their own bold label below
+    const above = i % 2 === 0;
+    const ty = above ? y - 8 : y + 14;
+    return `<text x="${x.toFixed(1)}" y="${ty.toFixed(1)}" text-anchor="middle" class="viz-svg-label bg">${esc(path[i].name)}</text>`;
+  }).join('');
+
+  // endpoint labels, offset away from the line so they don't overlap it
+  const startAnchor = sx < W / 2 ? 'start' : 'end';
+  const endAnchor = ex < W / 2 ? 'start' : 'end';
+
+  return `
+    <svg class="viz-svg" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+      ${bgLine}
+      <polyline points="${closedPointsAttr}" fill="none" stroke="${color}" stroke-width="3.5"
+        stroke-linecap="round" stroke-linejoin="round" filter="url(#${glowId})"/>
+      ${dots}
+      ${bgLabels}
+      <text x="${sx + (startAnchor === 'start' ? 10 : -10)}" y="${sy - 10 < 14 ? sy + 20 : sy - 10}"
+        text-anchor="${startAnchor}" class="viz-svg-label">${esc(path[lo].name)}</text>
+      <text x="${ex + (endAnchor === 'start' ? 10 : -10)}" y="${ey - 10 < 14 ? ey + 20 : ey - 10}"
+        text-anchor="${endAnchor}" class="viz-svg-label">${esc(path[hi].name)}</text>
+      <defs>
+        <filter id="${glowId}" x="-50%" y="-50%" width="200%" height="200%">
+          <feDropShadow dx="0" dy="0" stdDeviation="2.2" flood-color="${color}" flood-opacity="0.65"/>
+        </filter>
+      </defs>
+    </svg>`;
+}
+
+// ── Tiny collapsed-row preview (no labels, no filters — cheap to render for
+// every row in the list at once, gives an at-a-glance shape before expanding) ──
+function buildMiniSparkline(path, isReroute, closedRange) {
+  const W = 64, H = 26, PAD = 4;
+  const lats = path.map(p => p.lat), lons = path.map(p => p.lon);
+  const minLat = Math.min(...lats), maxLat = Math.max(...lats);
+  const minLon = Math.min(...lons), maxLon = Math.max(...lons);
+  const midLatRad = ((minLat + maxLat) / 2) * Math.PI / 180;
+  const lonScale = Math.max(Math.cos(midLatRad), 0.15);
+  const rawSpanLat = maxLat - minLat;
+  const rawSpanLon = (maxLon - minLon) * lonScale;
+  const EPS = Math.max(rawSpanLat, rawSpanLon, 0.01) * 0.1;
+  const effSpanLat = Math.max(rawSpanLat, EPS);
+  const effSpanLon = Math.max(rawSpanLon, EPS);
+  const scale = Math.min((W - 2 * PAD) / effSpanLon, (H - 2 * PAD) / effSpanLat);
+  const offX = (W - rawSpanLon * scale) / 2;
+  const offY = (H - rawSpanLat * scale) / 2;
+  const project = (lat, lon) => [offX + (lon - minLon) * lonScale * scale, offY + (maxLat - lat) * scale];
+
+  const pts = path.map(p => project(p.lat, p.lon));
+  const color = isReroute ? '#f5a623' : '#ef4444';
+  const lo = closedRange ? closedRange.start_index : 0;
+  const hi = closedRange ? closedRange.end_index : pts.length - 1;
+  const hasSubRange = closedRange && (lo > 0 || hi < pts.length - 1);
+
+  const bgLine = hasSubRange
+    ? `<polyline points="${pts.map(([x,y])=>`${x.toFixed(1)},${y.toFixed(1)}`).join(' ')}" fill="none" stroke="#3060d0" stroke-width="1.5" opacity="0.5"/>`
+    : '';
+  const closedAttr = pts.slice(lo, hi + 1).map(([x,y])=>`${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+
+  return `<svg class="awy-spark" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet">
+    ${bgLine}
+    <polyline points="${closedAttr}" fill="none" stroke="${color}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+  </svg>`;
+}
+
+// ── Live Leaflet mini-map (real basemap, same tiles as the main China map) ──
+// Only mounted when a row is expanded (never for collapsed rows) — keeps the
+// list itself instant even with 30+ airways, and network/tile cost only
+// happens for what the user actually opens.
+let kzVizMode = 'svg';           // 'svg' | 'map'
+let kzTileMapInstances = [];     // live Leaflet map objects, cleaned up on teardown
+
+function setKzVizMode(mode) {
+  if (mode === kzVizMode) return;
+  kzVizMode = mode;
+  document.querySelectorAll('.viz-mode-btn').forEach(b =>
+    b.classList.toggle('active', b.dataset.mode === mode));
+  // re-render only the rows currently expanded — preserves scroll position
+  // and which airways the user has open (no jarring full rebuild)
+  expandedAwyIdx.forEach(idx => {
+    const row = document.querySelector(`.awy-row[data-idx="${idx}"]`);
+    if (row) renderAwyDetail(idx, row);
+  });
+}
+
+function _teardownKzTileMaps() {
+  kzTileMapInstances.forEach(m => { try { m.remove(); } catch (e) {} });
+  kzTileMapInstances = [];
+}
+
+function teardownAwyRowMap(row) {
+  const mapEl = row.querySelector('.viz-map');
+  if (mapEl && mapEl._leafletMap) {
+    try { mapEl._leafletMap.remove(); } catch (e) {}
+    kzTileMapInstances = kzTileMapInstances.filter(m => m !== mapEl._leafletMap);
+  }
+}
+
+function mountKzMiniMap(container, path, isReroute, closedRange, fitMode) {
+  if (!window.L || container._leafletMap) return;
+
+  const map = L.map(container, {
+    zoomControl: true, attributionControl: false,
+    // fully interactive in the expanded detail view — user can freely drag
+    // and zoom out to see the rest of the airway beyond the default
+    // closed-segment fit
+    dragging: true, scrollWheelZoom: true, doubleClickZoom: true,
+    boxZoom: true, keyboard: true, touchZoom: true,
+    zoomSnap: 0.25, fadeAnimation: false, zoomAnimation: false, markerZoomAnimation: false,
+  });
+  container._leafletMap = map;
+  map.getContainer().classList.add('viz-map-inner');
+
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}', {
+    maxNativeZoom: 16, maxZoom: 18,
+  }).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}', {
+    maxNativeZoom: 16, maxZoom: 18,
+  }).addTo(map);
+
+  const color = isReroute ? '#f5a623' : '#ef4444';
+  const bgColor = '#3060d0'; // same blue as the main China map's "Airway (background)"
+  const latlngs = path.map(p => [p.lat, p.lon]);
+
+  const lo = closedRange ? closedRange.start_index : 0;
+  const hi = closedRange ? closedRange.end_index : path.length - 1;
+  const hasSubRange = closedRange && (lo > 0 || hi < path.length - 1);
+  const closedLatlngs = latlngs.slice(lo, hi + 1);
+
+  // full airway shown as background context (only if the closed stretch is
+  // a genuine sub-range — otherwise it would just overdraw the highlight).
+  // It's always drawn on the map even when not in view, so panning/zooming
+  // out reveals it — the whole point of "drag out to see the rest".
+  if (hasSubRange) {
+    L.polyline(latlngs, { color: bgColor, weight: 2, opacity: 0.55 }).addTo(map);
+  }
+  // the actually-closed (or reroute) stretch, highlighted
+  L.polyline(closedLatlngs, {
+    color, weight: 4, opacity: 0.95, lineCap: 'round', lineJoin: 'round',
+  }).addTo(map);
+
+  path.forEach((p, i) => {
+    const isClosedEnd = i === lo || i === hi;
+    const marker = L.circleMarker([p.lat, p.lon], {
+      radius: isClosedEnd ? 5 : 3, color: '#0b1220', weight: 1.5,
+      fillColor: isClosedEnd ? color : bgColor, fillOpacity: isClosedEnd ? 1 : 0.75,
+    }).addTo(map);
+    // Endpoint labels are always visible. Every OTHER waypoint also gets a
+    // real label (not just hover) — it just stays hidden until the user is
+    // zoomed in enough to read it without the map turning into label soup;
+    // see the zoomend handler below, which reveals/hides them live.
+    marker.bindTooltip(esc(p.name), {
+      direction: 'top', className: 'kz-map-tooltip' + (isClosedEnd ? ' end' : ' bg-label'),
+      offset: [0, -4], permanent: true,
+    });
+  });
+
+  // 🔎 Reveal the non-closed waypoint labels once the user has zoomed in
+  // enough to actually read them clearly (toggled live as they zoom/pan) —
+  // solves "names should be visible once zoomed to a readable level" without
+  // ever cluttering the map at a wide, zoomed-out view.
+  const LABEL_ZOOM_THRESHOLD = 8;
+  const updateLabelVisibility = () => {
+    const show = map.getZoom() >= LABEL_ZOOM_THRESHOLD;
+    map.getContainer().classList.toggle('labels-visible', show);
+  };
+  map.on('zoomend', updateLabelVisibility);
+
+  // 🎯 Default view = tight fit on just the CLOSED stretch (not the whole
+  // airway) so it reads clearly instead of being a tiny sliver in a huge,
+  // mostly-irrelevant map. "Full airway" fit is one click away via the
+  // toggle, or the user can simply drag/scroll-zoom out manually.
+  const fitTarget = (fitMode === 'full' || !hasSubRange) ? latlngs : closedLatlngs;
+  map.fitBounds(fitTarget, { padding: [36, 36], maxZoom: 12 });
+  updateLabelVisibility(); // fitBounds may not always fire zoomend synchronously
+
+  kzTileMapInstances.push(map);
+  // container may not have final flex size the instant it's mounted
+  requestAnimationFrame(() => map.invalidateSize());
+}
+
+// ── Accordion: airway rows are collapsed by default; expand reveals the
+// detailed diagram/map + full waypoint chip list. Only expanded rows ever
+// build a visualization, so the list itself stays instant no matter how
+// many airways (30+) a NOTAM produces.
+let expandedAwyIdx = new Set();
+
+function toggleAwyRow(idx) {
+  const row = document.querySelector(`.awy-row[data-idx="${idx}"]`);
+  if (!row) return;
+  const opening = !row.classList.contains('expanded');
+  row.classList.toggle('expanded', opening);
+
+  if (opening) {
+    expandedAwyIdx.add(idx);
+    renderAwyDetail(idx, row);
+  } else {
+    expandedAwyIdx.delete(idx);
+    teardownAwyRowMap(row);
+    // let the collapse transition finish before wiping content (avoids a
+    // visible content-pop right as it shrinks)
+    setTimeout(() => {
+      if (!row.classList.contains('expanded')) {
+        const inner = row.querySelector('.awy-row-body-inner');
+        if (inner) inner.innerHTML = '';
+      }
+    }, 300);
+  }
+}
+
+function renderAwyDetail(idx, row) {
+  const t = (window.__lastKzTiles || [])[idx];
+  const inner = row.querySelector('.awy-row-body-inner');
+  if (!t || !inner) return;
+  teardownAwyRowMap(row); // guard: re-rendering (e.g. viz-mode switch) while already open
+
+  if (!t.path || t.path.length < 2) {
+    inner.innerHTML = '<div class="awy-detail-empty">No coordinate data available to visualize this airway.</div>';
+    return;
+  }
+
+  const closedRange = t.closed_range;
+  const lo = closedRange ? closedRange.start_index : 0;
+  const hi = closedRange ? closedRange.end_index : t.path.length - 1;
+  const hasSubRange = closedRange && (lo > 0 || hi < t.path.length - 1);
+
+  let distNm = 0;
+  for (let i = lo; i < hi; i++) {
+    distNm += haversineNM(t.path[i].lat, t.path[i].lon, t.path[i + 1].lat, t.path[i + 1].lon);
+  }
+
+  const firs = [...new Set(t.waypoints.map(w => w.fir).filter(Boolean))].join(', ') || '—';
+
+  const wpChips = t.waypoints.map((w, wi) => {
+    const inRange = wi >= lo && wi <= hi;
+    const cls = inRange ? (t.is_reroute ? 'awy-wp-chip reroute' : 'awy-wp-chip closed') : 'awy-wp-chip';
+    return `<span class="${cls}">${esc(w.name)}<i>${esc(w.fir || '-')}</i></span>`;
+  }).join('');
+
+  // 🎯 Default zoom is the closed stretch only — the rest of the (often much
+  // longer, irrelevant) airway is one click away via this toggle, or by
+  // dragging/scroll-zooming out directly on the Live Map.
+  const fitMode = awyFitMode[idx] || 'closed';
+  const fitToggleHtml = hasSubRange ? `
+    <div class="awy-fit-toggle">
+      <button class="awy-fit-btn ${fitMode === 'closed' ? 'active' : ''}" onclick="setAwyFitMode(${idx},'closed')">Closed segment</button>
+      <button class="awy-fit-btn ${fitMode === 'full' ? 'active' : ''}" onclick="setAwyFitMode(${idx},'full')">Full airway</button>
+    </div>` : '';
+
+  const vizHtml = kzVizMode === 'map'
+    ? `<div class="viz-map" id="awy-map-${idx}"></div><div class="awy-zoom-hint">🔍 Zoom in to reveal all waypoint names</div>`
+    : buildAirwayPathSvg(t.path, t.is_reroute, `d${idx}-${t.airway}`, closedRange, { width: 640, height: 260, fitMode });
+
+  inner.innerHTML = `
+    <div class="awy-detail">
+      <div class="awy-detail-top">
+        <div class="awy-detail-stat">
+          <span class="label">${t.is_reroute ? 'Reroute stretch' : 'Closed between'}</span>
+          <span class="value">${esc(t.path[lo].name)} → ${esc(t.path[hi].name)}</span>
+        </div>
+        <div class="awy-detail-stat"><span class="label">Distance</span><span class="value">${distNm.toFixed(0)} NM</span></div>
+        <div class="awy-detail-stat"><span class="label">Total waypoints</span><span class="value">${t.waypoints.length}</span></div>
+        <div class="awy-detail-stat"><span class="label">FIRs crossed</span><span class="value">${esc(firs)}</span></div>
+        ${fitToggleHtml}
+      </div>
+      <div class="awy-detail-viz">${vizHtml}</div>
+      <div class="awy-detail-wplist">${wpChips}</div>
+    </div>
+  `;
+
+  if (kzVizMode === 'map') {
+    const mapEl = inner.querySelector('.viz-map');
+    if (mapEl) requestAnimationFrame(() => mountKzMiniMap(mapEl, t.path, t.is_reroute, closedRange, fitMode));
+  }
+}
+
+// which zoom fit ('closed' | 'full') each expanded row is currently showing —
+// persists across viz-mode toggles so switching Diagram↔Live Map keeps the
+// same zoom the user picked
+let awyFitMode = {};
+function setAwyFitMode(idx, mode) {
+  awyFitMode[idx] = mode;
+  const row = document.querySelector(`.awy-row[data-idx="${idx}"]`);
+  if (row) renderAwyDetail(idx, row);
+}
+
+
+function filterKzList() {
+  const q = document.getElementById('kz-search').value.trim().toUpperCase();
+  document.querySelectorAll('.awy-row').forEach(row => {
+    const match = !q || (row.dataset.search || '').includes(q);
+    row.style.display = match ? '' : 'none';
+  });
+}
+
 function renderKzResults(data) {
+  window.__lastKzData = data;
+  expandedAwyIdx = new Set();
+  awyFitMode = {};
+  _teardownKzTileMaps();
   document.getElementById('meta-section').style.display = 'block';
   document.getElementById('meta-id').textContent = data.notam_id || '—';
 
@@ -1483,62 +1985,58 @@ function renderKzResults(data) {
     });
   }
 
-  // ── Right grid: airway visual tiles ──
+  // ── Airway accordion list (collapsed by default, expand for full detail) ──
+  window.__lastKzTiles = tiles;
   const grid  = document.getElementById('kz-grid');
   const empty = document.getElementById('kz-empty');
+  const statsEl = document.getElementById('kz-stats');
   grid.innerHTML = '';
 
   if (!tiles.length) {
     empty.style.display = 'block';
     empty.textContent = 'No airways detected in this NOTAM.';
+    statsEl.innerHTML = '';
     return;
   }
   empty.style.display = 'none';
 
-  tiles.forEach(t => {
-    const tile = document.createElement('div');
-    tile.className = 'kz-tile' + (t.is_reroute ? ' reroute' : '');
+  const closedCount  = tiles.filter(t => !t.is_reroute).length;
+  const rerouteCount = tiles.filter(t => t.is_reroute).length;
+  statsEl.innerHTML = `
+    <span class="kz-stat-chip total"><span class="n">${tiles.length}</span> airways</span>
+    <span class="kz-stat-chip closed"><span class="n">${closedCount}</span> closed</span>
+    ${rerouteCount ? `<span class="kz-stat-chip reroute"><span class="n">${rerouteCount}</span> reroute</span>` : ''}
+  `;
 
-    // corner label for reroute (detour) airways from RERTE VIA ...
-    const badgeHtml = t.is_reroute
-      ? `<div class="reroute-badge"><span class="dot"></span>RERTE</div>`
-      : '';
+  tiles.forEach((t, ti) => {
+    const hasPath = t.path && t.path.length >= 2;
+    const lo = t.closed_range ? t.closed_range.start_index : 0;
+    const hi = t.closed_range ? t.closed_range.end_index : (hasPath ? t.path.length - 1 : 0);
 
-    const wpHtml = t.waypoints.map(w =>
-      `<div class="kz-wp">${esc(w.name)} <span class="fir">(${esc(w.fir||'-')})</span></div>`
-    ).join('');
+    const row = document.createElement('div');
+    row.className = 'awy-row' + (t.is_reroute ? ' reroute' : '') + (!hasPath ? ' no-range' : '');
+    row.dataset.idx = ti;
+    row.dataset.search = (t.airway + ' ' + t.waypoints.map(w => w.name).join(' ')).toUpperCase();
 
-    let vizHtml = '<div style="color:#94a3b8;font-size:11px">—</div>';
-    if (t.extremes) {
-      const ex = t.extremes;
-      if (ex.orientation === 'vertical') {
-        vizHtml = `
-          <div class="viz-v">
-            <div class="viz-label">${esc(ex.north)}</div>
-            <div class="viz-vline"></div>
-            <div class="viz-label">${esc(ex.south)}</div>
-          </div>`;
-      } else {
-        vizHtml = `
-          <div class="viz-h">
-            <div class="viz-hlabels">
-              <span>${esc(ex.west)}</span>
-              <span>${esc(ex.east)}</span>
-            </div>
-            <div class="viz-hline"></div>
-          </div>`;
-      }
-    }
+    const rangeLabel = hasPath
+      ? `<b>${esc(t.path[lo].name)}</b><span class="arrow">→</span><b>${esc(t.path[hi].name)}</b>`
+      : '<span style="opacity:.5">no coordinate data</span>';
+    const miniSpark = hasPath ? buildMiniSparkline(t.path, t.is_reroute, t.closed_range) : '';
+    const metaText = `${t.waypoints.length} wpt${t.waypoints.length === 1 ? '' : 's'}`;
 
-    tile.innerHTML = `
-    ${badgeHtml}
-      <div class="kz-text">
-        <div class="kz-title">${esc(t.airway)}</div>
-        ${wpHtml}
-      </div>
-      <div class="kz-viz">${vizHtml}</div>
+    row.innerHTML = `
+      <button class="awy-row-head" onclick="toggleAwyRow(${ti})">
+        <span class="awy-row-dot"></span>
+        <span class="awy-row-code">${esc(t.airway)}</span>
+        <span class="awy-badge">${t.is_reroute ? 'RERTE' : 'CLOSED'}</span>
+        <span class="awy-row-range">${rangeLabel}</span>
+        <span class="awy-row-mini">${miniSpark}</span>
+        <span class="awy-row-meta">${metaText}</span>
+        <span class="awy-row-chevron">▾</span>
+      </button>
+      <div class="awy-row-body"><div class="awy-row-body-inner"></div></div>
     `;
-    grid.appendChild(tile);
+    grid.appendChild(row);
   });
 }
 

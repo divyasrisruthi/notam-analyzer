@@ -2284,13 +2284,33 @@ def _extract_reroute_routes(notam_text: str) -> set:
                 rerte_routes.add(tok)
     return rerte_routes
 
-def _build_kz_tiles(notam_text: str, closed_routes=None, reroute_routes=None):
+def _build_kz_tiles(notam_text: str, closed_routes=None, reroute_routes=None, segments=None):
     closed_routes = {r.strip().upper() for r in (closed_routes or set())}
     reroute_routes = {r.strip().upper() for r in (reroute_routes or set())}
-    """Build airway visual tiles for KZ NOTAMs (right-side grid only)."""
+    segments = segments or []
     normalized = re.sub(r"[^A-Z0-9/ ]", " ", notam_text.upper())
     tokens = re.split(r"[ /]+", normalized)
     airways_found = sorted({t for t in tokens if t and t in WPT_BY_AIRWAY})
+
+
+    # 🧭 route(upper) -> (endpoint_name_a, endpoint_name_b) for the FIRST real
+    # closure segment on that route. Used to find exactly which sub-range of
+    # the full airway is actually closed, so the viz can show the whole
+    # airway for context and highlight only the closed stretch.
+    seg_endpoints_by_route = {}
+    for seg in segments:
+        if seg.get("no_valid_direction"):
+            continue
+        route = (seg.get("route") or "").strip().upper()
+        if not route or route in seg_endpoints_by_route:
+            continue
+        pa = seg.get("point_a", {}) or {}
+        pb = seg.get("point_b", {}) or {}
+        a = (pa.get("display_name") or pa.get("name") or pa.get("raw") or "").strip().upper()
+        b = (pb.get("display_name") or pb.get("name") or pb.get("raw") or "").strip().upper()
+        if a and b:
+            seg_endpoints_by_route[route] = (a, b)
+
 
     tiles = []
     for awy in airways_found:
@@ -2305,7 +2325,7 @@ def _build_kz_tiles(notam_text: str, closed_routes=None, reroute_routes=None):
             "us_family": _fir_family(WPT_META[i].get("fir", "")) == "US_FAMILY",
         } for i in idxs]
 
-        # 🔴 red-line visual uses ONLY K1-K7 / KZ / TJ (ignore CY etc.)
+        # 🔴 red-line extremes use ONLY K1-K7 / KZ / TJ (ignore CY etc.)
         closed_wps = [w for w in waypoints if w["us_family"]]
         viz_wps = closed_wps if len(closed_wps) >= 2 else waypoints
 
@@ -2323,11 +2343,33 @@ def _build_kz_tiles(notam_text: str, closed_routes=None, reroute_routes=None):
                 "east":  east["name"],  "west":  west["name"],
             }
 
+        # 🧭 Full flight path for the mini-viz: EVERY waypoint on this airway,
+        # in true along-airway sequence (WPT_BY_AIRWAY preserves file/source
+        # order) — the whole route is drawn for context, not just the closed bit.
+        path = [{"name": w["name"], "lat": w["lat"], "lon": w["lon"]} for w in waypoints]
+
+        # 🎯 Which sub-range of the FULL path is actually closed, so the
+        # frontend can render the rest of the airway as background and only
+        # highlight the true closed stretch (mirrors the China map's
+        # "Airway (background)" vs "Closed segment" legend).
+        closed_range = None
+        pair = seg_endpoints_by_route.get(awy)
+        if pair:
+            a, b = pair
+            names_upper = [w["name"].strip().upper() for w in waypoints]
+            if a in names_upper and b in names_upper:
+                ia, ib = names_upper.index(a), names_upper.index(b)
+                lo, hi = (ia, ib) if ia <= ib else (ib, ia)
+                closed_range = {"start_index": lo, "end_index": hi,
+                                 "start": waypoints[lo]["name"], "end": waypoints[hi]["name"]}
+                
         tiles.append({
             "airway": awy,
             "waypoints": waypoints,
             "count": len(waypoints),
             "extremes": extremes,
+            "path": path,
+            "closed_range": closed_range,
             # RERTE only if it was positively named in a RERTE string AND not closed.
             # An unparsed closure now shows NO badge (loud miss) instead of a fake RERTE.
             "is_reroute": (awy in reroute_routes) and (awy not in closed_routes), # ✅ true = detour route, not closed
@@ -2803,6 +2845,7 @@ def analyze():
                               notam_text,
                               {s.get("route","").strip().upper() for s in segments},
                               _extract_reroute_routes(notam_text),
+                              segments,
                           ) if is_kz else [],
         "copy_output":    _build_kz_copy_output(segments) if is_kz else "",
         "total_airways":  0,

@@ -26,6 +26,17 @@ body{font-family:var(--sans);background:var(--navy);color:var(--text);height:100
 .tb-title{font-family:var(--mono);font-size:13px;font-weight:600;color:var(--teal);letter-spacing:.08em}
 .tb-divider{width:1px;height:20px;background:var(--border)}
 .tb-sub{font-family:var(--mono);font-size:11px;color:var(--muted)}
+/* Show the airway dataset cycle and validity dates in the header. */
+.airway-data-info{
+  font-family:var(--mono);
+  font-size:10px;
+  color:#9fe8d7;
+  border:1px solid rgba(0,212,170,.20);
+  background:rgba(0,212,170,.06);
+  padding:4px 10px;
+  border-radius:6px;
+  white-space:nowrap;
+}
 .tb-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .tb-status{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:11px;color:var(--muted)}
 .tb-status-dot{width:6px;height:6px;border-radius:50%;background:var(--muted);transition:all .3s}
@@ -618,6 +629,12 @@ display:none;
   <div class="tb-title">NOTAM WAYPOINT ANALYZER</div>
   <div class="tb-divider"></div>
   <div class="tb-sub">ATS Route Closure Tool</div>
+
+  <!-- Dataset information is filled in by checkHealth(). -->
+  <div class="airway-data-info" id="airway-data-info">
+    AIRWAY DATA: Loading...
+  </div>
+
   <div class="tb-right">
     <div class="tb-status">
       <div class="tb-status-dot" id="api-dot"></div>
@@ -772,15 +789,54 @@ function showToast(msg) {
 
 // ── Health check ──────────────────────────────────────────────────────────────
 async function checkHealth() {
+  const apiDot = document.getElementById('api-dot');
+  const apiLabel = document.getElementById('api-label');
+  const wptCount = document.getElementById('wpt-count');
+  const airwayInfo = document.getElementById('airway-data-info');
+
   try {
-    const d = await fetch('/api/health', {signal: AbortSignal.timeout(4000)}).then(r=>r.json());
-    document.getElementById('api-dot').className = 'tb-status-dot ok';
-    document.getElementById('api-label').textContent = 'API online';
-    document.getElementById('wpt-count').textContent = d.waypoints_loaded.toLocaleString() + ' wpts';
-  } catch {
-    document.getElementById('api-dot').className = 'tb-status-dot err';
-    document.getElementById('api-label').textContent = 'API offline';
-    showToast('Cannot reach backend — make sure Flask is running on port 5000');
+    // Read the existing backend health endpoint without cached data.
+    const resp = await fetch('/api/health', {
+      signal: AbortSignal.timeout(4000),
+      cache: 'no-store'
+    });
+
+    const d = await resp.json();
+
+    // Do not show a healthy status if the backend reports a problem.
+    if (!resp.ok) {
+      throw new Error('Backend health check failed');
+    }
+
+    apiDot.className = 'tb-status-dot ok';
+    apiLabel.textContent = 'API online';
+
+    // Keep the existing waypoint count display.
+    const loaded = Number(d.waypoints_loaded || 0);
+    wptCount.textContent = loaded.toLocaleString() + ' wpts';
+
+    // Show the cycle and dates already returned by app.py.
+    const cycle = d.data_cycle || '--';
+    const from = d.data_valid_from || '--';
+    const to = d.data_valid_to || '--';
+
+    if (airwayInfo) {
+      airwayInfo.textContent =
+        `🟢 AIRWAY DATA: ${cycle} | ${from} - ${to}`;
+    }
+
+  } catch (err) {
+    console.error('Health check failed:', err);
+
+    apiDot.className = 'tb-status-dot err';
+    apiLabel.textContent = 'API offline';
+
+    // Clear old dataset information when the health check fails.
+    if (airwayInfo) {
+      airwayInfo.textContent = '🔴 AIRWAY DATA: Unavailable';
+    }
+
+    showToast('Cannot reach backend or waypoint data is unavailable');
   }
 }
 
